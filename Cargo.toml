@@ -1,10 +1,11 @@
 [package]
-name = "moving-gc-arena"
+name = "moving_gc_arena"
 version = "0.1.0"
 authors = ["Jason Carr <jcarr250@protonmail.com>"]
 edition = "2018"
 include = ["src/**/*", "Cargo.toml"]
 description = "Lightweight Garbage-collectable regions using indices and explicit roots"
+license = "MPL-2.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
