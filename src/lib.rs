@@ -215,6 +215,7 @@ impl <T> Spot<T> {
     }
     // Change this into a broken heart to other,
     // updating the external reference
+    #[allow(unused)]
     fn move_to(&mut self, other: Ix<T>) {
         if let Spot::Present(ref mut e) = self {
             e.move_to(other);
