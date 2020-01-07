@@ -104,9 +104,13 @@ impl <T> Ix<T> {
  * Ex is a mutable index, which will receive updates
  * to the index as the source arena moves
  */
-#[derive(Clone)]
 pub struct Ex<T> {
     cell: Rc<IxCell<T>>
+}
+impl <T> Clone for Ex<T> {
+    fn clone(&self) -> Self {
+        Ex {cell: self.cell.clone()}
+    }
 }
 pub type Weak<T> = Ex<T>;
 /**
