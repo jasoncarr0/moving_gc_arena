@@ -11,6 +11,9 @@ use std::rc;
 use std::cell::Cell;
 
 mod types;
+#[cfg(feature = "debug-arena")]
+mod nonce;
+
 pub use types::{Ix};
 use types::{IxCell};
 
@@ -66,7 +69,19 @@ impl <T> Ix<T> {
      *
      * Otherwise, Ok will always be returned.
      */
-    fn check_region(&self, _region: &Region<T>) -> Result<(), Error> {
+    #[inline]
+    #[allow(unused)]
+    pub fn check_region(&self, region: &Region<T>) -> Result<(), Error> {
+        #[cfg(feature = "debug-arena")]
+        {
+            if self.nonce != region.nonce {
+                Err(Error::IncorrectRegion)?;
+            } else if self.generation < region.generation {
+                Err(Error::EntryExpired)?;
+            } else if self.generation > region.generation {
+                Err(Error::Indeterminable)?;
+            }
+        }
         Ok(())
     }
     /**
@@ -159,8 +174,8 @@ impl <T> Ex<T> {
 
 #[derive(Debug)]
 struct Entry<T> {
+    rc: rc::Weak<IxCell<T>>,
     t: T,
-    rc: rc::Weak<IxCell<T>>
 }
 impl <T> Entry<T> {
     //upgrade to an Ix, creating the cell if necessary
@@ -268,12 +283,24 @@ impl <'a, T> MutEntry<'a, T> {
 pub struct Region<T> {
     data: Vec<Spot<T>>,
     roots: Vec<rc::Weak<IxCell<T>>>,
+
+    #[cfg(feature = "debug-arena")]
+    nonce: u64,
+    #[cfg(feature = "debug-arena")]
+    generation: u64,
 }
+
 impl <T> Region<T> {
+
+
     pub fn new() -> Self {
         Region {
             data: Vec::new(),
             roots: Vec::new(),
+            #[cfg(feature = "debug-arena")]
+            nonce: nonce::next(),
+            #[cfg(feature = "debug-arena")]
+            generation: 0,
         }
     }
 }
@@ -284,13 +311,18 @@ pub trait HasIx<T : 'static> {
 }
 impl <'a, T: 'static + HasIx<T>> Region<T> {
 
+
+
     // Perform a gc into a new destination vector. For efficiency,
     // the vector must have enough capacity for the new elements
     fn prim_gc_to<'b : 'a>(src: &mut [Spot<T>], dst: &'b mut Vec<Spot<T>>,
-                           roots: &mut Vec<rc::Weak<IxCell<T>>>) where
+                           roots: &mut Vec<rc::Weak<IxCell<T>>>,
+                           #[cfg(feature = "debug-arena")] old_gen: (u64, u64),
+                           #[cfg(feature = "debug-arena")] new_gen: (u64, u64),
+                           )
+    where
         T : HasIx<T>
     {
-
         // safety NOTE: Necessary for safety of this method,
         // since we need to avoid a particular invalidation later
         // This means that dst should never move for safety
@@ -301,7 +333,13 @@ impl <'a, T: 'static + HasIx<T>> Region<T> {
         //this as unsafe, but it is unsafe and should
         //always be called from an unsafe block
         let push_spot = |len: usize, s: &mut Spot<T>| {
-            let new_index = Ix::new(len);
+            let new_index = Ix::new(len,
+                #[cfg(feature = "debug-arena")]
+                new_gen.0,
+                #[cfg(feature = "debug-arena")]
+                new_gen.1,
+            );
+
 
             if let Spot::Present(e) = s {
                 e.move_to(new_index);
@@ -318,10 +356,33 @@ impl <'a, T: 'static + HasIx<T>> Region<T> {
         //Start searching at the vector length before any roots
         let mut obj_index = dst.len();
 
+        #[cfg(feature = "debug-arena")]
+        let check_gen = |ix: Ix<T>, internal: bool| {
+            {
+                let prefix = if internal {"GC internal error (root)"} else {"GC"};
+                if ix.nonce != old_gen.0 {
+                    if ix.nonce == new_gen.0 {
+                        panic!("{}: Index processed twice", prefix);
+                    } else {
+                        panic!("{}: Invalid source index for root", prefix);
+                    }
+                } else if ix.generation < old_gen.1 {
+                    panic!("{}: Index is for a generation that is too old, it may have missed processing", prefix);
+                } else if ix.generation > old_gen.1 {
+                    panic!("{}: Index is for a generation that is too new, it may have been processed twice", prefix);
+                }
+            }
+        };
+
+
         //Push each root onto the destination, updating roots
         *roots = roots.drain(..).filter_map(|root| {
             let rc = root.upgrade()?;
-            let s = src.get_mut(rc.get().ix())?;
+            let ix = rc.get();
+            #[cfg(feature = "debug-arena")]
+            check_gen(ix, true);
+
+            let s = src.get_mut(ix.ix())?;
             unsafe {
                 rc.set(push_spot(dst.len(), s));
                 dst.set_len(dst.len() + 1);
@@ -331,12 +392,16 @@ impl <'a, T: 'static + HasIx<T>> Region<T> {
 
         //Cheney copy starting at each of the roots
         while obj_index < dst.len() {
+
             let len = dst.len();
             let obj = dst.get_mut(obj_index).unwrap()
                 .get_entry_mut().get_mut();
             let mut len_offset = 0;
 
             obj.foreach_ix( |pointed| {
+                #[cfg(feature = "debug-arena")]
+                check_gen(*pointed, false);
+
                 match src.get_mut(pointed.ix()) {
                     Some(s) => {
                         match s {
@@ -371,9 +436,22 @@ impl <'a, T: 'static + HasIx<T>> Region<T> {
         let cap = self.data.capacity();
         if cap >= len + additional { return }
         let mut dst = Vec::with_capacity(len + std::cmp::max(len, additional));
-        Self::prim_gc_to(&mut self.data, &mut dst, &mut self.roots);
+
+        #[cfg(feature = "debug-arena")]
+        let new_gen = (self.nonce, self.generation+1);
+
+        Self::prim_gc_to(&mut self.data, &mut dst, &mut self.roots,
+            #[cfg(feature = "debug-arena")]
+            (self.nonce, self.generation),
+            #[cfg(feature = "debug-arena")]
+            new_gen);
         self.roots = self.roots.drain(..).filter(|root| {root.upgrade().is_some()}).collect();
         self.data = dst;
+
+        #[cfg(feature = "debug-arena")]
+        {
+            self.generation = new_gen.1;
+        }
     }
 
     /**
@@ -391,7 +469,12 @@ impl <'a, T: 'static + HasIx<T>> Region<T> {
         let n = self.data.len();
         self.data.push(Spot::Present(Entry::new(make_t(&self))));
         MutEntry {
-            ix: Ix::new(n),
+            ix: Ix::new(n,
+                #[cfg(feature = "debug-arena")]
+                self.nonce,
+                #[cfg(feature = "debug-arena")]
+                self.generation,
+                ),
             entry: self.data.get_mut(n).unwrap().get_entry_mut(),
             roots: &mut self.roots
         }
@@ -403,9 +486,17 @@ impl <'a, T: 'static + HasIx<T>> Region<T> {
      */
     pub fn gc(&mut self) {
         let mut dst = Vec::with_capacity(self.data.len());
-        Self::prim_gc_to(&mut self.data, &mut dst, &mut self.roots);
+        Self::prim_gc_to(&mut self.data, &mut dst, &mut self.roots,
+            #[cfg(feature = "debug-arena")]
+            (self.nonce, self.generation),
+            #[cfg(feature = "debug-arena")]
+            (self.nonce, self.generation+1));
         self.roots = self.take_valid_roots().collect();
         self.data = dst;
+        #[cfg(feature = "debug-arena")]
+        {
+            self.generation = self.generation+1;
+        }
     }
     /**
      * Move the elements of this region onto the end of another Region.
@@ -414,7 +505,11 @@ impl <'a, T: 'static + HasIx<T>> Region<T> {
      */
     pub fn gc_into(mut self, other: &mut Region<T>) {
         other.ensure(self.data.len());
-        Self::prim_gc_to(&mut self.data, &mut other.data, &mut self.roots);
+        Self::prim_gc_to(&mut self.data, &mut other.data, &mut self.roots,
+            #[cfg(feature = "debug-arena")]
+            (self.nonce, self.generation),
+            #[cfg(feature = "debug-arena")]
+            (other.nonce, other.generation));
         other.roots.extend(self.take_valid_roots());
     }
     /**
