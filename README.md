@@ -14,7 +14,7 @@
 ### Changed
 - Separated Weak and Root into two different types.
     + Weak.ix() now returns Option<Ix<T>>, which can be used to test
-      if it's been collected
+      if it's been collected. (Root's methods are unchanged)
 - MutEntry::to_root is now MutEntry::root and no longer takes ownership
 
 ### Fixed
@@ -26,12 +26,11 @@ to act like roots.
 This is a library for indexed regions supporting efficient garbage collection and (eventually) other traversal operations such as cloning.
 
 You should use this library if you want to keep a safe cyclic graph data structure, with simple, performant garbage collection.
-This library does not read the Rust stack, instead, roots are simply acquired resources, which can be used like any other resource. It compiles on stable 2018 Rust.
+This library does not read the Rust stack, instead, roots are acquired resources, which can be used like any other resource and dropped as normal. It compiles on stable 2018 Rust and contains only minimal unsafe code.
 
-You should not use this library if you need hard real-time guarantees for allocation enough that Vec is a problem (and can't manage to pre-allocate).
+You should not use this library if you need hard real-time guarantees for allocation enough that Vec is a problem (and can't manage to pre-allocate). In the current version, only single-threaded use is possible.
 
-Dereferencing indices uses a reference to the region itself, giving strong safety guarantees. Users are recommended to create
-wrappers for traversal if the ergonomics of this gets in the way.
+Dereferencing indices uses a reference to the region, giving strong safety guarantees. Users are recommended to create wrappers for traversal if the ergonomics of this gets in the way.
 
 ## Details of features and limitations
 
