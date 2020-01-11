@@ -55,7 +55,4 @@ impl <T> Ix<T> {
     #[inline(always)]
     pub(crate) fn ix(&self) -> usize {self.ix}
 }
-// We don't need UnsafeCell here it turns out
-// but we should only update it with the correct
-// capability
 pub type IxCell<T> = Cell<Ix<T>>;

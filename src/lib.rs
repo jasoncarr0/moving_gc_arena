@@ -43,7 +43,7 @@ impl std::error::Error for Error { }
 /**
  * A raw index for a region, that should be used for internal edges.
  * This index is invalidated by many operations, but locations which
- * have always been exposed by foreach_ix for each collection are
+ * have always been exposed exactly once by foreach_ix for each collection are
  * guaranteed to have an index which is valid.
  *
  * Furthermore, indices received from a MutEntry or Root/Weak are
@@ -116,7 +116,7 @@ impl <T> Ix<T> {
         }
     }
 }
-/*
+/**
  * Ex is a mutable index, which will receive updates
  * to the index as the source arena moves
  */
@@ -166,6 +166,12 @@ impl <T> Ex<T> {
         self.ix().try_get_mut(r)
     }
 
+    /**
+     * Get the raw index pointed to this by external index.
+     * All validity caveats of indices apply, so this should
+     * most likely be used only to move into a location
+     * that is owned by an element of the Region
+     */
     #[inline(always)]
     pub fn ix(&self) -> Ix<T> {
         self.cell.get()
@@ -306,6 +312,25 @@ impl <T> Region<T> {
 }
 
 pub trait HasIx<T : 'static> {
+    /**
+     * Expose a mutable reference to every Ix owned
+     * by this datastructure. Any Ix which is not
+     * exposed by this function will be invalidated
+     * by a garbage collection. The object which
+     * was pointed to may also have been collected.
+     *
+     * If some Ix is owned by two or more instances of
+     * this type (such as via Rc<Cell<...>>),
+     * then the situation is tricker. Because
+     * this is an uncommon use case, and because
+     * enforcing uniqueness in the collector would
+     * create additional space and time overheads,
+     * ensuring uniqueness is a requirement of the implementer.
+     *
+     * Avoid panicking in this method. A panic may
+     * cause some elements to never be dropped, leaking
+     * any owned memory outside the region.
+     */
     fn foreach_ix<'b, 'a : 'b, F>(&'a mut self, f: F) where
         F: FnMut(&'b mut Ix<T>);
 }
@@ -398,6 +423,10 @@ impl <'a, T: 'static + HasIx<T>> Region<T> {
                 .get_entry_mut().get_mut();
             let mut len_offset = 0;
 
+            // NOTE for safety:
+            // foreach_ix can panic,
+            // therefore, length should never
+            // be set until a valid object is in the location
             obj.foreach_ix( |pointed| {
                 #[cfg(feature = "debug-arena")]
                 check_gen(*pointed, false);
@@ -429,8 +458,11 @@ impl <'a, T: 'static + HasIx<T>> Region<T> {
             obj_index += 1;
         }
     }
-    // Ensure that the capacity supports new_elems more
-    // elements, collecting garbage if necessary
+
+    /**
+     * Ensure that the capacity supports new_elems more
+     * elements, collecting garbage if necessary.
+     */
     pub fn ensure(&mut self, additional: usize) {
         let len = self.data.len();
         let cap = self.data.capacity();
@@ -455,7 +487,10 @@ impl <'a, T: 'static + HasIx<T>> Region<T> {
     }
 
     /**
-     * Allocate a new object, returning a handle.
+     * Allocate a new object, returning a temporary handle,
+     * which can be used to mutate the object and to get
+     * roots, weak pointers, and internal pointers to
+     * the object.
      *
      * This may trigger a garbage collection. As such,
      * a function is used to generate the new value, which
@@ -482,7 +517,6 @@ impl <'a, T: 'static + HasIx<T>> Region<T> {
 
     /**
      * Immediately trigger a standard garbage collection.
-     *
      */
     pub fn gc(&mut self) {
         let mut dst = Vec::with_capacity(self.data.len());
