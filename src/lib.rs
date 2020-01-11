@@ -269,6 +269,16 @@ impl <T> Entry<T> {
         }
     }
 
+    fn check_clear_rc(&mut self) {
+        match self.rc {
+            Some(ref mut rc) =>
+                if 0 == Rc::weak_count(rc) {
+                    self.rc = None;
+                },
+            None => (),
+        }
+    }
+
     fn new(t: T) -> Self {
         Entry {
             t, rc: None,
@@ -429,6 +439,7 @@ impl <'a, T: 'static + HasIx<T>> Region<T> {
 
 
             if let Spot::Present(e) = s {
+                e.check_clear_rc();
                 e.move_to(new_index);
             };
             let obj = std::mem::replace(s, Spot::BrokenHeart(new_index));
