@@ -1,3 +1,26 @@
+
+# Recent changes
+
+## [0.2.0] - 2020-01-11
+### Added
+- Added an optional feature to enable debugging index validity at the cost of efficiency
+    + Accesses to regions will be checked and give correct errors
+    + Validity will be checked during GC
+    + This has a dramatic increase in space cost, and a small overhead in time.
+- Ix<T> supports an identifier method, which returns a usize,
+    unique for the current region/generation
+- Added and improved documentation in several places
+
+### Changed
+- Separated Weak and Root into two different types.
+    + Weak.ix() now returns Option<Ix<T>>, which can be used to test
+      if it's been collected
+- MutEntry::to_root is now MutEntry::root and no longer takes ownership
+
+### Fixed
+- Creating a weak and root pointer to the same entry would cause Weak pointers
+to act like roots.
+
 # Moving GC Arena
 
 This is a library for indexed regions supporting efficient garbage collection and (eventually) other traversal operations such as cloning.

@@ -1,7 +1,6 @@
 # Changelog
 
-## [Unreleased]
-
+## [0.2.0] - 2020-01-11
 ### Added
 - Added an optional feature to enable debugging index validity at the cost of efficiency
     + Accesses to regions will be checked and give correct errors
@@ -12,7 +11,9 @@
 - Added and improved documentation in several places
 
 ### Changed
-- EntryExpired error now includes generations in error
+- Separated Weak and Root into two different types.
+    + Weak.ix() now returns Option<Ix<T>>, which can be used to test
+      if it's been collected
 
 ## [0.1.1] - 2020-01-07
 ### Added

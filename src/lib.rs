@@ -4,7 +4,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#![doc(html_root_url = "https://docs.rs/moving_gc_arena/0.1.1")]
+#![doc(html_root_url = "https://docs.rs/moving_gc_arena/0.2.0")]
 
 use std::rc::Rc;
 use std::rc;
@@ -130,12 +130,22 @@ impl <T> Clone for Weak<T> {
         Weak {cell: self.cell.clone()}
     }
 }
-pub struct Root<T> {
-    cell: Rc<IxCell<T>>
-}
 impl <T> Debug for Weak<T> {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         self.cell.upgrade().fmt(f)
+    }
+}
+pub struct Root<T> {
+    cell: Rc<IxCell<T>>
+}
+impl <T> Clone for Root<T> {
+    fn clone(&self) -> Self {
+        Root {cell: self.cell.clone()}
+    }
+}
+impl <T> Debug for Root<T> {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        self.cell.get().fmt(f)
     }
 }
 
@@ -184,11 +194,6 @@ impl <T> Weak<T> {
 }
 
 
-impl <T> Debug for Root<T> {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        self.cell.get().fmt(f)
-    }
-}
 /**
  * A root is always a valid pointer into its corresponding region, regardless of
  * the presence of any garbage collections.
