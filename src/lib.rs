@@ -78,7 +78,7 @@ impl <T> Ix<T> {
             if self.nonce != region.nonce {
                 Err(Error::IncorrectRegion)?;
             } else if self.generation < region.generation {
-                Err(Error::EntryExpired(self.generation, region.generation))?;
+                Err(Error::EntryExpired)?;
             } else if self.generation > region.generation {
                 Err(Error::Indeterminable)?;
             }
