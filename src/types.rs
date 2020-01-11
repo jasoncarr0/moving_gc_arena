@@ -53,6 +53,18 @@ impl <T> Ix<T> {
     }
 
     #[inline(always)]
-    pub(crate) fn ix(&self) -> usize {self.ix}
+    pub(crate) fn ix(self) -> usize {self.ix}
+
+    /**
+     * Get an identifier for this index.
+     * It is unique amongst indices in this region,
+     * so long as they have not been invalidated.
+     *
+     * Like the index itself, uniqueness is only
+     * guaranteed as long as the index has not been
+     * invalidated.
+     */
+    #[inline(always)]
+    pub fn identifier(self) -> usize {self.ix}
 }
 pub type IxCell<T> = Cell<Ix<T>>;
