@@ -563,3 +563,111 @@ impl <'a, T: 'static + HasIx<T>> Region<T> {
         self.roots.drain(..).filter(|root| {root.upgrade().is_some()})
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::{Ix, Region, HasIx};
+
+    struct Elem {
+        ix: Option<Ix<Elem>>,
+    }
+    impl Elem {
+        pub fn new() -> Self {
+            Elem { ix: None }
+        }
+    }
+    impl HasIx<Elem> for Elem {
+        fn foreach_ix<'b, 'a : 'b, F>(&'a mut self, f: F) where
+            F: FnMut(&'b mut Ix<Elem>)
+        {
+            self.ix.iter_mut().for_each(f)
+        }
+    }
+
+    #[test]
+    pub fn weaks_are_weak() {
+        let mut r = Region::new();
+        let w1 = r.alloc(|_| {Elem::new()}).weak();
+
+        let mut e2 = r.alloc(|_| {Elem::new()});
+        let w2 = e2.weak();
+        let r2 = e2.to_root();
+
+        r.gc();
+        let w3 = r.alloc(|_| {Elem::new()}).weak();
+
+        // first is collected by now
+        assert!(w1.try_get(&r).is_err());
+
+        // root and new version are both accessible
+        assert!(w2.try_get(&r).is_ok());
+        assert!(w3.try_get(&r).is_ok());
+
+        // touch r
+        drop(r2);
+    }
+
+    #[test]
+    pub fn roots_are_root() {
+        let mut r = Region::new();
+        let mut e1 = r.alloc(|_| {Elem::new()});
+        let w1 = e1.weak();
+        let r1 = e1.to_root();
+        let r2 = r.alloc(|_| {Elem::new()}).to_root();
+        std::mem::drop(r1);
+        r.gc();
+
+        //r1 should have stopped being root on drop
+        assert!(w1.try_get(&r).is_err());
+
+        //r2 is still a root
+        assert!(r2.try_get(&r).is_ok());
+    }
+
+    #[test]
+    pub fn indirect_correct() {
+        let mut r = Region::new();
+
+        let mut e1 = r.alloc(|_| {Elem::new()});
+        let w1 = e1.weak();
+        let r1 = e1.to_root();
+        let r2 = r.alloc(|_| {Elem {ix: Some(r1.ix())}}).weak();
+        std::mem::drop(r1);
+
+        let mut e3 = r.alloc(|_| {Elem::new()});
+        e3.as_mut_ref().ix = Some(e3.ix());
+        let w3 = e3.weak();
+
+        let r4 = r.alloc(|_| {Elem::new()}).to_root();
+        let w5 = r.alloc(|_| {Elem::new()}).weak();
+
+        r4.get_mut(&mut r).ix = Some(w5.ix());
+        w5.get_mut(&mut r).ix = Some(r4.ix());
+
+        //nothing changed with r4 and w5 during access
+        assert!(r4.try_get(&r).is_ok());
+        assert!(w5.try_get(&r).is_ok());
+        std::mem::drop(r4);
+
+        r.gc();
+
+        //entries 1 and 2 are still good.
+        assert!(match w1.try_get(&r) {
+            Ok(Elem { ix: None }) => true,
+            _ => false,
+        });
+        assert!(match r2.try_get(&r) {
+            Ok(Elem { ix: Some(_) }) => true,
+            _ => false,
+        });
+
+        // entries 3, 4 and 5 should be collected
+        // despite cycles
+        assert!(w3.try_get(&r).is_err());
+        assert!(w5.try_get(&r).is_err());
+
+    }
+
+
+}
