@@ -22,19 +22,19 @@ use types::{IxCell};
 pub enum Error {
     Indeterminable,
     IncorrectRegion,
-    EntryExpired,
+    EntryExpired(u64, u64),
     UnexpectedInternalState,
 }
 
 use std::fmt;
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        f.write_str(match self {
-            Error::Indeterminable => "Invalid index",
-            Error::IncorrectRegion => "Incorrect region for index",
-            Error::EntryExpired => "Index expired",
-            Error::UnexpectedInternalState => "Correct region has invalid internal state",
-        })
+        match self {
+            Error::Indeterminable => write!(f, "Invalid index"),
+            Error::IncorrectRegion => write!(f, "Incorrect region for index"),
+            Error::EntryExpired(old, new) => write!(f, "Index expired, ix had: {} but region had {}", old, new),
+            Error::UnexpectedInternalState => write!(f, "Correct region has invalid internal state"),
+        }
     }
 
 }
@@ -77,7 +77,7 @@ impl <T> Ix<T> {
             if self.nonce != region.nonce {
                 Err(Error::IncorrectRegion)?;
             } else if self.generation < region.generation {
-                Err(Error::EntryExpired)?;
+                Err(Error::EntryExpired(self.generation, region.generation))?;
             } else if self.generation > region.generation {
                 Err(Error::Indeterminable)?;
             }
