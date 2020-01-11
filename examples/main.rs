@@ -23,20 +23,20 @@ fn main() {
         }
     }
 
-    let ex1 = r.alloc(|_| {Obj::new()}).to_root();
-    let ex2 = r.alloc(|_| {Obj { ix: vec![ex1.ix()] }}).weak();
-    ex1.get_mut(&mut r).ix = vec![ex2.ix(), ex1.ix()];
+    let r1 = r.alloc(|_| {Obj::new()}).root();
+    let ex2 = r.alloc(|_| {Obj { ix: vec![r1.ix()] }}).weak();
+    r1.get_mut(&mut r).ix = vec![ex2.ix().unwrap(), r1.ix()];
 
-    let ex3 = r.alloc(|_| {Obj { ix: vec![ex2.ix(), ex1.ix()] }}).to_root();
+    let ex3 = r.alloc(|_| {Obj { ix: vec![ex2.ix().unwrap(), r1.ix()] }}).root();
 
-    std::mem::drop(ex1);
+    std::mem::drop(r1);
     {
         let mut v = Vec::new();
         for _ in 1..60 {
             v.clear();
             for _ in 1..100 {
                 for _ in 1..1000 {
-                    let root = r.alloc(|_|{Obj { ix: vec![ex2.ix()] }}).to_root();
+                    let root = r.alloc(|_|{Obj { ix: vec![ex2.ix().unwrap()] }}).root();
                     v.push(root);
                 }
                 let i = v.get(v.len()-1).unwrap().ix();
@@ -55,7 +55,7 @@ fn main() {
                 if e.ix.len() >= 5 {
                     e.ix.pop();
                     e.ix.pop();
-                    e.ix.extend(v.get(0).map(gc::Ex::ix));
+                    e.ix.extend(v.get(0).map(gc::Root::ix));
                 }
             }
         }

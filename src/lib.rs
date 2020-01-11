@@ -9,6 +9,7 @@
 use std::rc::Rc;
 use std::rc;
 use std::cell::Cell;
+use std::fmt::{Debug, Formatter};
 
 mod types;
 #[cfg(feature = "debug-arena")]
@@ -22,7 +23,7 @@ use types::{IxCell};
 pub enum Error {
     Indeterminable,
     IncorrectRegion,
-    EntryExpired(u64, u64),
+    EntryExpired,
     UnexpectedInternalState,
 }
 
@@ -32,7 +33,7 @@ impl fmt::Display for Error {
         match self {
             Error::Indeterminable => write!(f, "Invalid index"),
             Error::IncorrectRegion => write!(f, "Incorrect region for index"),
-            Error::EntryExpired(old, new) => write!(f, "Index expired, ix had: {} but region had {}", old, new),
+            Error::EntryExpired => write!(f, "Index expired"),
             Error::UnexpectedInternalState => write!(f, "Correct region has invalid internal state"),
         }
     }
@@ -120,27 +121,79 @@ impl <T> Ix<T> {
  * Ex is a mutable index, which will receive updates
  * to the index as the source arena moves
  */
-pub struct Ex<T> {
-    cell: Rc<IxCell<T>>
+
+pub struct Weak<T> {
+    cell: rc::Weak<IxCell<T>>
 }
-impl <T> Clone for Ex<T> {
+impl <T> Clone for Weak<T> {
     fn clone(&self) -> Self {
-        Ex {cell: self.cell.clone()}
+        Weak {cell: self.cell.clone()}
     }
 }
-pub type Weak<T> = Ex<T>;
+pub struct Root<T> {
+    cell: Rc<IxCell<T>>
+}
+impl <T> Debug for Weak<T> {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        self.cell.upgrade().fmt(f)
+    }
+}
+
+impl <T> Weak<T> {
+    /**
+     * Gets the value at this location, when
+     * passed the correct region. As with Ix,
+     * the behavior when the region or location is
+     * unspecified (but is still safe).
+     */
+    pub fn get<'a>(&self, r: &'a Region<T>) -> &'a T {
+        self.try_get(r).unwrap()
+    }
+    pub fn get_mut<'a>(&self, r: &'a mut Region<T>) -> &'a mut T {
+        self.try_get_mut(r).unwrap()
+    }
+    /**
+     * Try to get a reference to this data, possibly returning an error.
+     *
+     * If the region is correct, then an error always indicates that the pointed-to
+     * entry is no longer valid
+     */
+    pub fn try_get<'a>(&self, r: &'a Region<T>) -> Result<&'a T, Error> {
+        match self.ix() {
+            Some(i) => i.try_get(r),
+            None => Err(Error::EntryExpired)
+        }
+    }
+    pub fn try_get_mut<'a>(&self, r: &'a mut Region<T>) -> Result<&'a mut T, Error> {
+        match self.ix() {
+            Some(i) => i.try_get_mut(r),
+            None => Err(Error::EntryExpired)
+        }
+    }
+
+    /**
+     * Get the raw index pointed to this by external index.
+     * All validity caveats of indices apply, so this should
+     * most likely be used only to move into a location
+     * that is owned by an element of the Region
+     */
+    #[inline(always)]
+    pub fn ix(&self) -> Option<Ix<T>> {
+        Some(self.cell.upgrade()?.get())
+    }
+}
+
+
+impl <T> Debug for Root<T> {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        self.cell.get().fmt(f)
+    }
+}
 /**
  * A root is always a valid pointer into its corresponding region, regardless of
  * the presence of any garbage collections.
  */
-pub type Root<T> = Ex<T>;
-impl <T> std::fmt::Debug for Ex<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        self.cell.get().fmt(f)
-    }
-}
-
-impl <T> Ex<T> {
+impl <T> Root<T> {
     /**
      * Gets the value at this location, when
      * passed the correct region. As with Ix,
@@ -180,22 +233,25 @@ impl <T> Ex<T> {
 
 #[derive(Debug)]
 struct Entry<T> {
-    rc: rc::Weak<IxCell<T>>,
+    // We'll always keep an RC live here so that
+    // the weak pointers can use upgrade() to check.
+    // At GC time, we clear if weak_count is 0
+    rc: Option<Rc<IxCell<T>>>,
     t: T,
 }
 impl <T> Entry<T> {
     //upgrade to an Ix, creating the cell if necessary
-    fn weak(&mut self, ix: Ix<T>) -> Ex<T> {
-        let cell =
-            match self.rc.upgrade() {
-                Some(rc) => rc,
+    fn weak(&mut self, ix: Ix<T>) -> Weak<T> {
+        let cell = Rc::downgrade(
+            &match self.rc {
+                Some(ref rc) => rc.clone(),
                 None => {
                     let rc = Rc::new(Cell::new(ix));
-                    self.rc = Rc::downgrade(&rc);
+                    self.rc = Some(rc.clone());
                     rc
                 }
-            };
-        Ex {
+            });
+        Weak {
             cell
         }
     }
@@ -208,14 +264,14 @@ impl <T> Entry<T> {
     }
 
     fn move_to(&mut self, other: Ix<T>) {
-        if let Some(rc) = self.rc.upgrade() {
+        if let Some(ref mut rc) = self.rc {
             rc.set(other)
         }
     }
 
     fn new(t: T) -> Self {
         Entry {
-            t, rc: rc::Weak::new(),
+            t, rc: None,
         }
     }
 }
@@ -252,19 +308,25 @@ impl <T> Spot<T> {
 pub struct MutEntry<'a, T> {
     ix: Ix<T>,
     entry: &'a mut Entry<T>,
+    root: rc::Weak<IxCell<T>>,
     roots: &'a mut Vec<rc::Weak<IxCell<T>>>,
 }
 impl <'a, T> MutEntry<'a, T> {
     /**
-     * Convert this borrowed entry into a permanent root.
-     *
-     * The root may be cloned after creation, but only one
-     * entry can be created via this method.
+     * Create a root pointer, which will keep this object
+     * live across garbage collections.
      */
-    pub fn to_root(mut self) -> Root<T> {
-        let ex = self.weak();
-        self.roots.push(Rc::downgrade(&ex.cell));
-        ex
+    pub fn root(mut self) -> Root<T> {
+        let i = self.ix;
+        match self.root.upgrade() {
+            None => {
+                let rc = Rc::new(Cell::new(i));
+                self.roots.push(Rc::downgrade(&rc));
+                self.root = Rc::downgrade(&rc);
+                Root { cell: rc }
+            },
+            Some(cell) => Root { cell }
+        }
     }
 
     /**
@@ -511,6 +573,7 @@ impl <'a, T: 'static + HasIx<T>> Region<T> {
                 self.generation,
                 ),
             entry: self.data.get_mut(n).unwrap().get_entry_mut(),
+            root: rc::Weak::new(),
             roots: &mut self.roots
         }
     }
@@ -569,6 +632,7 @@ impl <'a, T: 'static + HasIx<T>> Region<T> {
 mod tests {
     use super::{Ix, Region, HasIx};
 
+    #[derive(Debug)]
     struct Elem {
         ix: Option<Ix<Elem>>,
     }
@@ -592,7 +656,7 @@ mod tests {
 
         let mut e2 = r.alloc(|_| {Elem::new()});
         let w2 = e2.weak();
-        let r2 = e2.to_root();
+        let r2 = e2.root();
 
         r.gc();
         let w3 = r.alloc(|_| {Elem::new()}).weak();
@@ -613,8 +677,8 @@ mod tests {
         let mut r = Region::new();
         let mut e1 = r.alloc(|_| {Elem::new()});
         let w1 = e1.weak();
-        let r1 = e1.to_root();
-        let r2 = r.alloc(|_| {Elem::new()}).to_root();
+        let r1 = e1.root();
+        let r2 = r.alloc(|_| {Elem::new()}).root();
         std::mem::drop(r1);
         r.gc();
 
@@ -631,18 +695,18 @@ mod tests {
 
         let mut e1 = r.alloc(|_| {Elem::new()});
         let w1 = e1.weak();
-        let r1 = e1.to_root();
-        let r2 = r.alloc(|_| {Elem {ix: Some(r1.ix())}}).weak();
+        let r1 = e1.root();
+        let r2 = r.alloc(|_| {Elem {ix: Some(r1.ix())}}).root();
         std::mem::drop(r1);
 
         let mut e3 = r.alloc(|_| {Elem::new()});
         e3.as_mut_ref().ix = Some(e3.ix());
         let w3 = e3.weak();
 
-        let r4 = r.alloc(|_| {Elem::new()}).to_root();
+        let r4 = r.alloc(|_| {Elem::new()}).root();
         let w5 = r.alloc(|_| {Elem::new()}).weak();
 
-        r4.get_mut(&mut r).ix = Some(w5.ix());
+        r4.get_mut(&mut r).ix = Some(w5.ix().unwrap());
         w5.get_mut(&mut r).ix = Some(r4.ix());
 
         //nothing changed with r4 and w5 during access
@@ -655,11 +719,11 @@ mod tests {
         //entries 1 and 2 are still good.
         assert!(match w1.try_get(&r) {
             Ok(Elem { ix: None }) => true,
-            _ => false,
+            x => panic!("{:?}", x),
         });
         assert!(match r2.try_get(&r) {
             Ok(Elem { ix: Some(_) }) => true,
-            _ => false,
+            x => panic!("{:?}", x),
         });
 
         // entries 3, 4 and 5 should be collected
