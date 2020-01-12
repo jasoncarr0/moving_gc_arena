@@ -331,7 +331,7 @@ impl <'a, T> MutEntry<'a, T> {
      * Create a root pointer, which will keep this object
      * live across garbage collections.
      */
-    pub fn root(mut self) -> Root<T> {
+    pub fn root(&mut self) -> Root<T> {
         let i = self.ix;
         match self.root.upgrade() {
             None => {
