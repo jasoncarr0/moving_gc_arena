@@ -3,7 +3,7 @@ use std::rc::Rc;
 use std::rc;
 use std::cell::Cell;
 
-use crate::types::{Ix, IxCell};
+use crate::types::{Ix, IxCell, SpotVariant};
 
 #[derive(Debug)]
 pub(crate) struct Entry<T> {
@@ -67,11 +67,24 @@ pub(crate) enum Spot<T> {
     Present(Entry<T>),
     BrokenHeart(Ix<T>),
 }
+
+
 impl <T> Spot<T> {
+    pub(crate) fn new(t: T) -> Self {
+        Spot::Present(Entry::new(t))
+    }
+
     pub(crate) fn get_entry_mut(&mut self) -> &mut Entry<T> {
         match self {
             Spot::Present(e) => e,
             _ => panic!("moving-gc-region internal error: Unexpected broken heart")
+        }
+    }
+
+    pub(crate) fn variant(&mut self) -> SpotVariant<Entry<T>, T> {
+        match self {
+            Spot::Present(e) => SpotVariant::Present(e),
+            Spot::BrokenHeart(i) => SpotVariant::BrokenHeart(*i)
         }
     }
 

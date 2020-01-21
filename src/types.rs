@@ -68,3 +68,8 @@ impl <T> Ix<T> {
     pub fn identifier(self) -> usize {self.ix}
 }
 pub type IxCell<T> = Cell<Ix<T>>;
+
+pub enum SpotVariant<'a, E, T> {
+    Present(&'a mut E),
+    BrokenHeart(Ix<T>),
+}

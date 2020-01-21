@@ -17,7 +17,7 @@ mod nonce;
 mod entry;
 
 pub use types::{Ix};
-use types::{IxCell};
+use types::{IxCell, SpotVariant};
 use entry::{Entry, Spot, Weak};
 
 #[derive(Debug, PartialEq, Eq)]
@@ -394,8 +394,8 @@ impl <'a, T: 'static + HasIx<T>> Region<T> {
 
                 match src.get_mut(pointed.ix()) {
                     Some(s) => {
-                        match s {
-                            Spot::Present(_) => {
+                        match s.variant() {
+                            SpotVariant::Present(_) => {
                                 //safety requirement for push_spot
                                 #[allow(unused)]
                                 unsafe {
@@ -403,8 +403,8 @@ impl <'a, T: 'static + HasIx<T>> Region<T> {
                                 }
                                 len_offset += 1;
                             },
-                            Spot::BrokenHeart(new_index) => {
-                                *pointed = *new_index
+                            SpotVariant::BrokenHeart(new_index) => {
+                                *pointed = new_index
                             }
                         }
                     },
@@ -463,7 +463,7 @@ impl <'a, T: 'static + HasIx<T>> Region<T> {
         //else the index could be incorrect
         self.ensure(1);
         let n = self.data.len();
-        self.data.push(Spot::Present(Entry::new(make_t(&self))));
+        self.data.push(Spot::new(make_t(&self)));
         MutEntry {
             ix: Ix::new(n,
                 #[cfg(feature = "debug-arena")]
