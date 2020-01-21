@@ -14,9 +14,11 @@ use std::fmt::{Debug, Formatter};
 mod types;
 #[cfg(feature = "debug-arena")]
 mod nonce;
+mod entry;
 
 pub use types::{Ix};
 use types::{IxCell};
+use entry::{Entry, Spot, Weak};
 
 #[derive(Debug, PartialEq, Eq)]
 #[allow(unused)]
@@ -102,7 +104,7 @@ impl <T> Ix<T> {
         self.check_region(region)?;
         match region.data.get(self.ix())
         {
-            Some(Spot::Present(e)) => Ok(&e.t),
+            Some(Spot::Present(e)) => Ok(e.get()),
             Some(Spot::BrokenHeart(_)) => Err(Error::Indeterminable),
             None => Err(Error::Indeterminable)
         }
@@ -111,30 +113,19 @@ impl <T> Ix<T> {
         self.check_region(region)?;
         match region.data.get_mut(self.ix())
         {
-            Some(Spot::Present(e)) => Ok(&mut e.t),
+            Some(Spot::Present(e)) => Ok(e.get_mut()),
             Some(Spot::BrokenHeart(_)) => Err(Error::Indeterminable),
             None => Err(Error::Indeterminable)
         }
     }
 }
-/**
- * Ex is a mutable index, which will receive updates
- * to the index as the source arena moves
- */
+pub struct MutEntry<'a, T> {
+    ix: Ix<T>,
+    entry: &'a mut Entry<T>,
+    root: rc::Weak<IxCell<T>>,
+    roots: &'a mut Vec<rc::Weak<IxCell<T>>>,
+}
 
-pub struct Weak<T> {
-    cell: rc::Weak<IxCell<T>>
-}
-impl <T> Clone for Weak<T> {
-    fn clone(&self) -> Self {
-        Weak {cell: self.cell.clone()}
-    }
-}
-impl <T> Debug for Weak<T> {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        self.cell.upgrade().fmt(f)
-    }
-}
 pub struct Root<T> {
     cell: Rc<IxCell<T>>
 }
@@ -179,17 +170,6 @@ impl <T> Weak<T> {
             Some(i) => i.try_get_mut(r),
             None => Err(Error::EntryExpired)
         }
-    }
-
-    /**
-     * Get the raw index pointed to this by external index.
-     * All validity caveats of indices apply, so this should
-     * most likely be used only to move into a location
-     * that is owned by an element of the Region
-     */
-    #[inline(always)]
-    pub fn ix(&self) -> Option<Ix<T>> {
-        Some(self.cell.upgrade()?.get())
     }
 }
 
@@ -236,96 +216,6 @@ impl <T> Root<T> {
     }
 }
 
-#[derive(Debug)]
-struct Entry<T> {
-    // We'll always keep an RC live here so that
-    // the weak pointers can use upgrade() to check.
-    // At GC time, we clear if weak_count is 0
-    rc: Option<Rc<IxCell<T>>>,
-    t: T,
-}
-impl <T> Entry<T> {
-    //upgrade to an Ix, creating the cell if necessary
-    fn weak(&mut self, ix: Ix<T>) -> Weak<T> {
-        let cell = Rc::downgrade(
-            &match self.rc {
-                Some(ref rc) => rc.clone(),
-                None => {
-                    let rc = Rc::new(Cell::new(ix));
-                    self.rc = Some(rc.clone());
-                    rc
-                }
-            });
-        Weak {
-            cell
-        }
-    }
-
-    pub fn get(&self) -> &T {
-        return &self.t
-    }
-    pub fn get_mut(&mut self) -> &mut T {
-        return &mut self.t
-    }
-
-    fn move_to(&mut self, other: Ix<T>) {
-        if let Some(ref mut rc) = self.rc {
-            rc.set(other)
-        }
-    }
-
-    fn check_clear_rc(&mut self) {
-        match self.rc {
-            Some(ref mut rc) =>
-                if 0 == Rc::weak_count(rc) {
-                    self.rc = None;
-                },
-            None => (),
-        }
-    }
-
-    fn new(t: T) -> Self {
-        Entry {
-            t, rc: None,
-        }
-    }
-}
-#[derive(Debug)]
-enum Spot<T> {
-    Present(Entry<T>),
-    BrokenHeart(Ix<T>),
-}
-impl <T> Spot<T> {
-    fn get_entry_mut(&mut self) -> &mut Entry<T> {
-        match self {
-            Spot::Present(e) => e,
-            _ => panic!("moving-gc-region internal error: Unexpected broken heart")
-        }
-    }
-
-    #[allow(unused)]
-    fn into_t(self) -> Option<T> {
-        match self {
-            Spot::Present(e) => Some(e.t),
-            Spot::BrokenHeart(_) => None,
-        }
-    }
-    // Change this into a broken heart to other,
-    // updating the external reference
-    #[allow(unused)]
-    fn move_to(&mut self, other: Ix<T>) {
-        if let Spot::Present(ref mut e) = self {
-            e.move_to(other);
-        }
-        *self = Spot::BrokenHeart(other);
-    }
-}
-pub struct MutEntry<'a, T> {
-    ix: Ix<T>,
-    entry: &'a mut Entry<T>,
-    root: rc::Weak<IxCell<T>>,
-    roots: &'a mut Vec<rc::Weak<IxCell<T>>>,
-}
 impl <'a, T> MutEntry<'a, T> {
     /**
      * Create a root pointer, which will keep this object
