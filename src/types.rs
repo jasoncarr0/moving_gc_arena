@@ -23,14 +23,7 @@ impl <T> std::fmt::Debug for Ix<T> {
 }
 impl <T> Clone for Ix<T> {
     fn clone(&self) -> Self {
-        Ix {
-            ix: self.ix,
-            _t: PhantomData,
-            #[cfg(feature = "debug-arena")]
-            nonce: self.nonce,
-            #[cfg(feature = "debug-arena")]
-            generation: self.generation,
-        }
+        self.transmute()
     }
 }
 impl <T> Copy for Ix<T> {}
@@ -66,5 +59,16 @@ impl <T> Ix<T> {
      */
     #[inline(always)]
     pub fn identifier(self) -> usize {self.ix}
+
+    pub(crate) fn transmute<S>(&self) -> Ix<S> {
+        Ix {
+            ix: self.ix,
+            _t: PhantomData,
+            #[cfg(feature = "debug-arena")]
+            nonce: self.nonce,
+            #[cfg(feature = "debug-arena")]
+            generation: self.generation,
+        }
+    }
 }
 pub type IxCell<T> = Cell<Ix<T>>;

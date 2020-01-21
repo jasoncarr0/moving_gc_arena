@@ -14,9 +14,11 @@ use std::fmt::{Debug, Formatter};
 mod types;
 #[cfg(feature = "debug-arena")]
 mod nonce;
+mod inject;
 
 pub use types::{Ix};
 use types::{IxCell};
+use inject::InjectInto;
 
 #[derive(Debug, PartialEq, Eq)]
 #[allow(unused)]
@@ -72,7 +74,9 @@ impl <T> Ix<T> {
      */
     #[inline]
     #[allow(unused)]
-    pub fn check_region(&self, region: &Region<T>) -> Result<(), Error> {
+    pub fn check_region<R>(&self, region: &Region<R>) -> Result<(), Error> where
+        T: InjectInto<R>
+    {
         #[cfg(feature = "debug-arena")]
         {
             if self.nonce != region.nonce {
@@ -92,26 +96,34 @@ impl <T> Ix<T> {
      * unspecified, and it may panic (but may also return a valid T reference).
      * Use try_get to avoid panics.
      */
-    pub fn get<'a>(self, region: &'a Region<T>) -> &'a T {
+    pub fn get<'a, R>(self, region: &'a Region<R>) -> &'a T where
+        T: InjectInto<R>
+    {
         self.try_get(region).expect("Ix::get")
     }
-    pub fn get_mut<'a>(self, region: &'a mut Region<T>) -> &'a mut T {
+    pub fn get_mut<'a, R>(self, region: &'a mut Region<R>) -> &'a mut T where
+        T: InjectInto<R>
+    {
         self.try_get_mut(region).expect("Ix::get_mut")
     }
-    pub fn try_get<'a>(self, region: &'a Region<T>) -> Result<&'a T, Error> {
+    pub fn try_get<'a, R>(self, region: &'a Region<R>) -> Result<&'a T, Error> where
+        T: InjectInto<R>
+    {
         self.check_region(region)?;
         match region.data.get(self.ix())
         {
-            Some(Spot::Present(e)) => Ok(&e.t),
+            Some(Spot::Present(e)) => InjectInto::project_ref(&e.t).ok_or(Error::Indeterminable),
             Some(Spot::BrokenHeart(_)) => Err(Error::Indeterminable),
             None => Err(Error::Indeterminable)
         }
     }
-    pub fn try_get_mut<'a>(self, region: &'a mut Region<T>) -> Result<&'a mut T, Error> {
+    pub fn try_get_mut<'a, R>(self, region: &'a mut Region<R>) -> Result<&'a mut T, Error> where
+        T: InjectInto<R>
+    {
         self.check_region(region)?;
         match region.data.get_mut(self.ix())
         {
-            Some(Spot::Present(e)) => Ok(&mut e.t),
+            Some(Spot::Present(e)) => InjectInto::project_mut(&mut e.t).ok_or(Error::Indeterminable),
             Some(Spot::BrokenHeart(_)) => Err(Error::Indeterminable),
             None => Err(Error::Indeterminable)
         }
@@ -156,10 +168,14 @@ impl <T> Weak<T> {
      * the behavior when the region or location is
      * unspecified (but is still safe).
      */
-    pub fn get<'a>(&self, r: &'a Region<T>) -> &'a T {
+    pub fn get<'a, R>(&self, r: &'a Region<R>) -> &'a T where
+        T: InjectInto<R>
+    {
         self.try_get(r).unwrap()
     }
-    pub fn get_mut<'a>(&self, r: &'a mut Region<T>) -> &'a mut T {
+    pub fn get_mut<'a, R>(&self, r: &'a mut Region<R>) -> &'a mut T where
+        T: InjectInto<R>
+    {
         self.try_get_mut(r).unwrap()
     }
     /**
@@ -168,13 +184,17 @@ impl <T> Weak<T> {
      * If the region is correct, then an error always indicates that the pointed-to
      * entry is no longer valid
      */
-    pub fn try_get<'a>(&self, r: &'a Region<T>) -> Result<&'a T, Error> {
+    pub fn try_get<'a, R>(&self, r: &'a Region<R>) -> Result<&'a T, Error> where
+        T: InjectInto<R>
+    {
         match self.ix() {
             Some(i) => i.try_get(r),
             None => Err(Error::EntryExpired)
         }
     }
-    pub fn try_get_mut<'a>(&self, r: &'a mut Region<T>) -> Result<&'a mut T, Error> {
+    pub fn try_get_mut<'a, R>(&self, r: &'a mut Region<R>) -> Result<&'a mut T, Error> where
+        T: InjectInto<R>
+    {
         match self.ix() {
             Some(i) => i.try_get_mut(r),
             None => Err(Error::EntryExpired)
@@ -320,18 +340,18 @@ impl <T> Spot<T> {
         *self = Spot::BrokenHeart(other);
     }
 }
-pub struct MutEntry<'a, T> {
-    ix: Ix<T>,
+pub struct MutEntry<'a, S, T> {
+    ix: Ix<S>,
     entry: &'a mut Entry<T>,
     root: rc::Weak<IxCell<T>>,
     roots: &'a mut Vec<rc::Weak<IxCell<T>>>,
 }
-impl <'a, T> MutEntry<'a, T> {
+impl <'a, S, T> MutEntry<'a, S, T> {
     /**
      * Create a root pointer, which will keep this object
      * live across garbage collections.
      */
-    pub fn root(&mut self) -> Root<T> {
+    pub fn root(&mut self) -> Root<S> {
         let i = self.ix;
         match self.root.upgrade() {
             None => {
@@ -349,17 +369,17 @@ impl <'a, T> MutEntry<'a, T> {
      * a consistent location in the region, but does not
      * act as a root for garbage collection
      */
-    pub fn weak(&mut self) -> Weak<T> {
+    pub fn weak(&mut self) -> Weak<S> {
         self.entry.weak(self.ix)
     }
-    pub fn ix(&self) -> Ix<T> {
+    pub fn ix(&self) -> Ix<S> {
         self.ix
     }
-    pub fn as_ref(&self) -> &T {
-        self.entry.get()
+    pub fn as_ref(&self) -> &S {
+        InjectInto::project_ref(self.entry.get())
     }
-    pub fn as_mut_ref(&mut self) -> &mut T {
-        self.entry.get_mut()
+    pub fn as_mut_ref(&mut self) -> &mut S {
+        InjectInto::project_mut(self.entry.get_mut())
     }
 }
 
@@ -574,13 +594,19 @@ impl <'a, T: 'static + HasIx<T>> Region<T> {
      * a function is used to generate the new value, which
      * can query the state of the world post-collection.
      */
-    pub fn alloc<F>(&mut self, make_t: F) -> MutEntry<T> where
+    pub fn alloc<F>(&mut self, make_t: F) -> MutEntry<T, T> where
         F: FnOnce(&Self) -> T
+    {
+        self.alloci(make_t)
+    }
+    pub fn alloci<S, F>(&mut self, make_t: F) -> MutEntry<S, T> where
+        F: FnOnce(&Self) -> S,
+        S: InjectInto<T>
     {
         //else the index could be incorrect
         self.ensure(1);
         let n = self.data.len();
-        self.data.push(Spot::Present(Entry::new(make_t(&self))));
+        self.data.push(Spot::Present(Entry::new(make_t(&self).inject())));
         MutEntry {
             ix: Ix::new(n,
                 #[cfg(feature = "debug-arena")]
@@ -588,7 +614,7 @@ impl <'a, T: 'static + HasIx<T>> Region<T> {
                 #[cfg(feature = "debug-arena")]
                 self.generation,
                 ),
-            entry: self.data.get_mut(n).unwrap().get_entry_mut(),
+            entry: InjectInto::project_mut(self.data.get_mut(n).unwrap().get_entry_mut()).unwrap(),
             root: rc::Weak::new(),
             roots: &mut self.roots
         }
