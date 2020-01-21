@@ -102,21 +102,19 @@ impl <T> Ix<T> {
     }
     pub fn try_get<'a>(self, region: &'a Region<T>) -> Result<&'a T, Error> {
         self.check_region(region)?;
-        match region.data.get(self.ix())
-        {
-            Some(Spot::Present(e)) => Ok(e.get()),
-            Some(Spot::BrokenHeart(_)) => Err(Error::Indeterminable),
-            None => Err(Error::Indeterminable)
-        }
+        Ok(region.data.get(self.ix())
+            .ok_or(Error::Indeterminable)?
+            .get()
+            .ok_or(Error::Indeterminable)?
+            .get())
     }
     pub fn try_get_mut<'a>(self, region: &'a mut Region<T>) -> Result<&'a mut T, Error> {
         self.check_region(region)?;
-        match region.data.get_mut(self.ix())
-        {
-            Some(Spot::Present(e)) => Ok(e.get_mut()),
-            Some(Spot::BrokenHeart(_)) => Err(Error::Indeterminable),
-            None => Err(Error::Indeterminable)
-        }
+        Ok(region.data.get_mut(self.ix())
+            .ok_or(Error::Indeterminable)?
+            .get_mut()
+            .ok_or(Error::Indeterminable)?
+            .get_mut())
     }
 }
 pub struct MutEntry<'a, T> {
@@ -332,12 +330,7 @@ impl <'a, T: 'static + HasIx<T>> Region<T> {
                 new_gen.1,
             );
 
-
-            if let Spot::Present(e) = s {
-                e.check_clear_rc();
-                e.move_to(new_index);
-            };
-            let obj = std::mem::replace(s, Spot::BrokenHeart(new_index));
+            let obj = s.move_to(new_index);
 
             unsafe {
                 let end = dst_spot_ptr.add(len);
