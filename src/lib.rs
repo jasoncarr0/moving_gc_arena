@@ -92,12 +92,15 @@ impl <T> Ix<T> {
      * unspecified, and it may panic (but may also return a valid T reference).
      * Use try_get to avoid panics.
      */
+    #[inline]
     pub fn get<'a>(self, region: &'a Region<T>) -> &'a T {
         self.try_get(region).expect("Ix::get")
     }
+    #[inline]
     pub fn get_mut<'a>(self, region: &'a mut Region<T>) -> &'a mut T {
         self.try_get_mut(region).expect("Ix::get_mut")
     }
+    #[inline]
     pub fn try_get<'a>(self, region: &'a Region<T>) -> Result<&'a T, Error> {
         self.check_region(region)?;
         match region.data.get(self.ix())
@@ -107,6 +110,7 @@ impl <T> Ix<T> {
             None => Err(Error::Indeterminable)
         }
     }
+    #[inline]
     pub fn try_get_mut<'a>(self, region: &'a mut Region<T>) -> Result<&'a mut T, Error> {
         self.check_region(region)?;
         match region.data.get_mut(self.ix())
@@ -156,9 +160,11 @@ impl <T> Weak<T> {
      * the behavior when the region or location is
      * unspecified (but is still safe).
      */
+    #[inline]
     pub fn get<'a>(&self, r: &'a Region<T>) -> &'a T {
         self.try_get(r).unwrap()
     }
+    #[inline]
     pub fn get_mut<'a>(&self, r: &'a mut Region<T>) -> &'a mut T {
         self.try_get_mut(r).unwrap()
     }
@@ -168,12 +174,14 @@ impl <T> Weak<T> {
      * If the region is correct, then an error always indicates that the pointed-to
      * entry is no longer valid
      */
+    #[inline]
     pub fn try_get<'a>(&self, r: &'a Region<T>) -> Result<&'a T, Error> {
         match self.ix() {
             Some(i) => i.try_get(r),
             None => Err(Error::EntryExpired)
         }
     }
+    #[inline]
     pub fn try_get_mut<'a>(&self, r: &'a mut Region<T>) -> Result<&'a mut T, Error> {
         match self.ix() {
             Some(i) => i.try_get_mut(r),
@@ -205,9 +213,11 @@ impl <T> Root<T> {
      * the behavior when the region or location is
      * unspecified (but is still safe).
      */
+    #[inline]
     pub fn get<'a>(&self, r: &'a Region<T>) -> &'a T {
         self.try_get(r).unwrap()
     }
+    #[inline]
     pub fn get_mut<'a>(&self, r: &'a mut Region<T>) -> &'a mut T {
         self.try_get_mut(r).unwrap()
     }
@@ -217,9 +227,11 @@ impl <T> Root<T> {
      * If the region is correct, then an error always indicates that the pointed-to
      * entry is no longer valid
      */
+    #[inline]
     pub fn try_get<'a>(&self, r: &'a Region<T>) -> Result<&'a T, Error> {
         self.ix().try_get(&r)
     }
+    #[inline]
     pub fn try_get_mut<'a>(&self, r: &'a mut Region<T>) -> Result<&'a mut T, Error> {
         self.ix().try_get_mut(r)
     }
