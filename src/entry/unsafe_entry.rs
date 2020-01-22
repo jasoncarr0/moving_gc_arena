@@ -180,7 +180,7 @@ impl Header {
         unsafe {
             match self.bits & 1usize {
                 0 => TaggedHeader::Present(
-                    PresentData::into_unchecked(self.present).clone()),
+                    PresentData::into_unchecked(self.present)),
                 1 => TaggedHeader::BrokenHeart(
                     BrokenHeart::into_unchecked(self.broken_heart)),
                 _ => unreachable!()
@@ -265,7 +265,6 @@ impl <T> Spot<T> {
         unsafe {
             match self.header.get_tag::<T>() {
                 TaggedHeader::Present(rc) => {
-                    forget(rc);
                     SpotVariant::Present(std::mem::transmute(self))
                 },
                 TaggedHeader::BrokenHeart(i) =>
