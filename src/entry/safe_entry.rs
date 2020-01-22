@@ -31,10 +31,10 @@ impl <T> Entry<T> {
     }
 
     pub fn get(&self) -> &T {
-        return &self.t
+        &self.t
     }
     pub fn get_mut(&mut self) -> &mut T {
-        return &mut self.t
+        &mut self.t
     }
 
     pub(crate) fn move_to(&mut self, other: Ix<T>) {
@@ -45,12 +45,10 @@ impl <T> Entry<T> {
     }
 
     pub(crate) fn check_clear_rc(&mut self) {
-        match self.rc {
-            Some(ref mut rc) =>
-                if 0 == Rc::weak_count(rc) {
-                    self.rc = None;
-                },
-            None => (),
+        if let Some(ref mut rc) = self.rc {
+            if 0 == Rc::weak_count(rc) {
+                self.rc = None;
+            }
         }
     }
 
