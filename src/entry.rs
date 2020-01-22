@@ -7,5 +7,8 @@
 
 //#[cfg(feature = "header_safety")]
 //#[cfg(feature = "header_safety")]
+#[allow(unused)]
+mod unsafe_entry;
+#[allow(unused)]
 mod safe_entry;
 pub use safe_entry::*;

@@ -74,13 +74,6 @@ impl <T> Spot<T> {
         Spot::Present(Entry::new(t))
     }
 
-    pub(crate) fn get_entry_mut(&mut self) -> &mut Entry<T> {
-        match self {
-            Spot::Present(e) => e,
-            _ => panic!("moving-gc-region internal error: Unexpected broken heart")
-        }
-    }
-
     pub(crate) fn variant(&mut self) -> SpotVariant<Entry<T>, T> {
         match self {
             Spot::Present(e) => SpotVariant::Present(e),

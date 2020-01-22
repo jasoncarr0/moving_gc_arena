@@ -381,7 +381,7 @@ impl <'a, T: 'static + HasIx<T>> Region<T> {
 
             let len = dst.len();
             let obj = dst.get_mut(obj_index).unwrap()
-                .get_entry_mut().get_mut();
+                .get_mut().unwrap().get_mut();
             let mut len_offset = 0;
 
             // NOTE for safety:
@@ -471,7 +471,7 @@ impl <'a, T: 'static + HasIx<T>> Region<T> {
                 #[cfg(feature = "debug-arena")]
                 self.generation,
                 ),
-            entry: self.data.get_mut(n).unwrap().get_entry_mut(),
+            entry: self.data.get_mut(n).unwrap().get_mut().unwrap(),
             root: rc::Weak::new(),
             roots: &mut self.roots
         }
