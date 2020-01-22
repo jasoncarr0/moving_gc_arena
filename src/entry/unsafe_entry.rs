@@ -209,16 +209,14 @@ pub(crate) struct Spot<T> {
 impl <T> Drop for Spot<T> {
     fn drop(&mut self) {
         unsafe {
-            match self.header.get_tag::<T>() {
-                TaggedHeader::Present(ptr) => {
-                    // drop contents
-                    let _ = std::ptr::drop_in_place(self.value.as_mut_ptr());
-                    // drop rc
-                    let _ = if let Some(ptr) = ptr {
-                        Rc::from_raw(ptr);
-                    };
-                },
-                _ => ()
+            if let TaggedHeader::Present(ptr) = self.header.get_tag::<T>() {
+                // drop contents
+                std::ptr::drop_in_place(self.value.as_mut_ptr());
+                // drop rc
+                if let Some(ptr) = ptr {
+                    Rc::from_raw(ptr);
+                    //drop
+                };
             }
         }
     }
@@ -236,7 +234,7 @@ impl <T> Spot<T> {
         unsafe {
             match self.header.get_tag::<T>() {
                 TaggedHeader::Present(_) =>
-                    Some(std::mem::transmute(self)),
+                    Some(&*(self as *const Spot<T> as *const Entry<T>)),
                 _ => None,
             }
         }
@@ -245,7 +243,7 @@ impl <T> Spot<T> {
         unsafe {
             match self.header.get_tag::<T>() {
                 TaggedHeader::Present(_) =>
-                    Some(std::mem::transmute(self)),
+                    Some(&mut *(self as *mut Spot<T> as *mut Entry<T>)),
                 _ => None,
             }
         }
@@ -265,7 +263,7 @@ impl <T> Spot<T> {
         unsafe {
             match self.header.get_tag::<T>() {
                 TaggedHeader::Present(rc) => {
-                    SpotVariant::Present(std::mem::transmute(self))
+                    SpotVariant::Present(&mut *(self as *mut Spot<T> as *mut Entry<T>))
                 },
                 TaggedHeader::BrokenHeart(i) =>
                     SpotVariant::BrokenHeart(i)
