@@ -14,9 +14,11 @@ use std::fmt::{Debug, Formatter};
 mod types;
 #[cfg(feature = "debug-arena")]
 mod nonce;
+mod entry;
 
 pub use types::{Ix};
-use types::{IxCell};
+use types::{IxCell, SpotVariant};
+use entry::{Entry, Spot, Weak};
 
 #[derive(Debug, PartialEq, Eq)]
 #[allow(unused)]
@@ -103,42 +105,29 @@ impl <T> Ix<T> {
     #[inline]
     pub fn try_get<'a>(self, region: &'a Region<T>) -> Result<&'a T, Error> {
         self.check_region(region)?;
-        match region.data.get(self.ix())
-        {
-            Some(Spot::Present(e)) => Ok(&e.t),
-            Some(Spot::BrokenHeart(_)) => Err(Error::Indeterminable),
-            None => Err(Error::Indeterminable)
-        }
+        Ok(region.data.get(self.ix())
+            .ok_or(Error::Indeterminable)?
+            .get()
+            .ok_or(Error::Indeterminable)?
+            .get())
     }
     #[inline]
     pub fn try_get_mut<'a>(self, region: &'a mut Region<T>) -> Result<&'a mut T, Error> {
         self.check_region(region)?;
-        match region.data.get_mut(self.ix())
-        {
-            Some(Spot::Present(e)) => Ok(&mut e.t),
-            Some(Spot::BrokenHeart(_)) => Err(Error::Indeterminable),
-            None => Err(Error::Indeterminable)
-        }
+        Ok(region.data.get_mut(self.ix())
+            .ok_or(Error::Indeterminable)?
+            .get_mut()
+            .ok_or(Error::Indeterminable)?
+            .get_mut())
     }
 }
-/**
- * Ex is a mutable index, which will receive updates
- * to the index as the source arena moves
- */
+pub struct MutEntry<'a, T> {
+    ix: Ix<T>,
+    entry: &'a mut Entry<T>,
+    root: rc::Weak<IxCell<T>>,
+    roots: &'a mut Vec<rc::Weak<IxCell<T>>>,
+}
 
-pub struct Weak<T> {
-    cell: rc::Weak<IxCell<T>>
-}
-impl <T> Clone for Weak<T> {
-    fn clone(&self) -> Self {
-        Weak {cell: self.cell.clone()}
-    }
-}
-impl <T> Debug for Weak<T> {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        self.cell.upgrade().fmt(f)
-    }
-}
 pub struct Root<T> {
     cell: Rc<IxCell<T>>
 }
@@ -187,17 +176,6 @@ impl <T> Weak<T> {
             Some(i) => i.try_get_mut(r),
             None => Err(Error::EntryExpired)
         }
-    }
-
-    /**
-     * Get the raw index pointed to this by external index.
-     * All validity caveats of indices apply, so this should
-     * most likely be used only to move into a location
-     * that is owned by an element of the Region
-     */
-    #[inline(always)]
-    pub fn ix(&self) -> Option<Ix<T>> {
-        Some(self.cell.upgrade()?.get())
     }
 }
 
@@ -248,96 +226,6 @@ impl <T> Root<T> {
     }
 }
 
-#[derive(Debug)]
-struct Entry<T> {
-    // We'll always keep an RC live here so that
-    // the weak pointers can use upgrade() to check.
-    // At GC time, we clear if weak_count is 0
-    rc: Option<Rc<IxCell<T>>>,
-    t: T,
-}
-impl <T> Entry<T> {
-    //upgrade to an Ix, creating the cell if necessary
-    fn weak(&mut self, ix: Ix<T>) -> Weak<T> {
-        let cell = Rc::downgrade(
-            &match self.rc {
-                Some(ref rc) => rc.clone(),
-                None => {
-                    let rc = Rc::new(Cell::new(ix));
-                    self.rc = Some(rc.clone());
-                    rc
-                }
-            });
-        Weak {
-            cell
-        }
-    }
-
-    pub fn get(&self) -> &T {
-        return &self.t
-    }
-    pub fn get_mut(&mut self) -> &mut T {
-        return &mut self.t
-    }
-
-    fn move_to(&mut self, other: Ix<T>) {
-        if let Some(ref mut rc) = self.rc {
-            rc.set(other)
-        }
-    }
-
-    fn check_clear_rc(&mut self) {
-        match self.rc {
-            Some(ref mut rc) =>
-                if 0 == Rc::weak_count(rc) {
-                    self.rc = None;
-                },
-            None => (),
-        }
-    }
-
-    fn new(t: T) -> Self {
-        Entry {
-            t, rc: None,
-        }
-    }
-}
-#[derive(Debug)]
-enum Spot<T> {
-    Present(Entry<T>),
-    BrokenHeart(Ix<T>),
-}
-impl <T> Spot<T> {
-    fn get_entry_mut(&mut self) -> &mut Entry<T> {
-        match self {
-            Spot::Present(e) => e,
-            _ => panic!("moving-gc-region internal error: Unexpected broken heart")
-        }
-    }
-
-    #[allow(unused)]
-    fn into_t(self) -> Option<T> {
-        match self {
-            Spot::Present(e) => Some(e.t),
-            Spot::BrokenHeart(_) => None,
-        }
-    }
-    // Change this into a broken heart to other,
-    // updating the external reference
-    #[allow(unused)]
-    fn move_to(&mut self, other: Ix<T>) {
-        if let Spot::Present(ref mut e) = self {
-            e.move_to(other);
-        }
-        *self = Spot::BrokenHeart(other);
-    }
-}
-pub struct MutEntry<'a, T> {
-    ix: Ix<T>,
-    entry: &'a mut Entry<T>,
-    root: rc::Weak<IxCell<T>>,
-    roots: &'a mut Vec<rc::Weak<IxCell<T>>>,
-}
 impl <'a, T> MutEntry<'a, T> {
     /**
      * Create a root pointer, which will keep this object
@@ -463,12 +351,7 @@ impl <'a, T: 'static + HasIx<T>> Region<T> {
                 new_gen.1,
             );
 
-
-            if let Spot::Present(e) = s {
-                e.check_clear_rc();
-                e.move_to(new_index);
-            };
-            let obj = std::mem::replace(s, Spot::BrokenHeart(new_index));
+            let obj = s.move_to(new_index);
 
             unsafe {
                 let end = dst_spot_ptr.add(len);
@@ -519,7 +402,7 @@ impl <'a, T: 'static + HasIx<T>> Region<T> {
 
             let len = dst.len();
             let obj = dst.get_mut(obj_index).unwrap()
-                .get_entry_mut().get_mut();
+                .get_mut().unwrap().get_mut();
             let mut len_offset = 0;
 
             // NOTE for safety:
@@ -532,8 +415,8 @@ impl <'a, T: 'static + HasIx<T>> Region<T> {
 
                 match src.get_mut(pointed.ix()) {
                     Some(s) => {
-                        match s {
-                            Spot::Present(_) => {
+                        match s.variant() {
+                            SpotVariant::Present(_) => {
                                 //safety requirement for push_spot
                                 #[allow(unused)]
                                 unsafe {
@@ -541,8 +424,8 @@ impl <'a, T: 'static + HasIx<T>> Region<T> {
                                 }
                                 len_offset += 1;
                             },
-                            Spot::BrokenHeart(new_index) => {
-                                *pointed = *new_index
+                            SpotVariant::BrokenHeart(new_index) => {
+                                *pointed = new_index
                             }
                         }
                     },
@@ -601,7 +484,7 @@ impl <'a, T: 'static + HasIx<T>> Region<T> {
         //else the index could be incorrect
         self.ensure(1);
         let n = self.data.len();
-        self.data.push(Spot::Present(Entry::new(make_t(&self))));
+        self.data.push(Spot::new(make_t(&self)));
         MutEntry {
             ix: Ix::new(n,
                 #[cfg(feature = "debug-arena")]
@@ -609,7 +492,7 @@ impl <'a, T: 'static + HasIx<T>> Region<T> {
                 #[cfg(feature = "debug-arena")]
                 self.generation,
                 ),
-            entry: self.data.get_mut(n).unwrap().get_entry_mut(),
+            entry: self.data.get_mut(n).unwrap().get_mut().unwrap(),
             root: rc::Weak::new(),
             roots: &mut self.roots
         }

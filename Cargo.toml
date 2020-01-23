@@ -18,3 +18,4 @@ debug=true
 
 [features]
 debug-arena=[]
+packed-headers=[]

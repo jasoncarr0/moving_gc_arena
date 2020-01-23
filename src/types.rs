@@ -7,6 +7,30 @@
 use std::cell::Cell;
 use std::marker::PhantomData;
 
+#[repr(C)]
+// repr(C) Needed for unsafe header
+// Note that Ix<T> can pack any set of
+// bits whatsoever
+/**
+ * A raw index for a region, that should be used for internal edges.
+ * This index is invalidated by many operations, but locations which
+ * have always been exposed exactly once by foreach_ix for each collection are
+ * guaranteed to have an index which is valid.
+ *
+ * Furthermore, indices received from a MutEntry or Root/Weak are
+ * valid when retrieved.
+ *
+ * An Ix is valid so long as no invalidating methods have been called.
+ * Borrowing rules ensure several situations in which no invalidating method can be called:
+ *  - An immutable reference to the region exists
+ *  - A mutable or immutable reference to any element of this region exists, such as those
+ *    acquired via Ix::get.
+ *  - A MutEntry for this region exists.
+ *
+ * If an Ix is not valid for the given region, behavior is unspecified but safe,
+ * A valid instance of T may be returned. Panics may occur with get and get_mut.
+ * If the index is valid, then it still points to the expected object.
+ */
 pub struct Ix<T> {
     ix: usize,
     _t: PhantomData<*mut T>,
@@ -68,3 +92,8 @@ impl <T> Ix<T> {
     pub fn identifier(self) -> usize {self.ix}
 }
 pub type IxCell<T> = Cell<Ix<T>>;
+
+pub enum SpotVariant<'a, E, T> {
+    Present(&'a mut E),
+    BrokenHeart(Ix<T>),
+}
