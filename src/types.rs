@@ -45,7 +45,7 @@ impl <T> Ix<T> {
                       #[cfg(feature = "debug-arena")]
                       generation: u64,
     ) -> Self {
-        Ix { ix: ix, _t: PhantomData,
+        Ix { ix, _t: PhantomData,
             #[cfg(feature = "debug-arena")]
             nonce,
             #[cfg(feature = "debug-arena")]

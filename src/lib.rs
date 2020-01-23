@@ -72,7 +72,7 @@ impl <T> Ix<T> {
      */
     #[inline]
     #[allow(unused)]
-    pub fn check_region(&self, region: &Region<T>) -> Result<(), Error> {
+    pub fn check_region(self, region: &Region<T>) -> Result<(), Error> {
         #[cfg(feature = "debug-arena")]
         {
             if self.nonce != region.nonce {
@@ -361,15 +361,19 @@ impl <'a, T> MutEntry<'a, T> {
      * a consistent location in the region, but does not
      * act as a root for garbage collection
      */
+    #[inline]
     pub fn weak(&mut self) -> Weak<T> {
         self.entry.weak(self.ix)
     }
+    #[inline]
     pub fn ix(&self) -> Ix<T> {
         self.ix
     }
+    #[inline]
     pub fn as_ref(&self) -> &T {
         self.entry.get()
     }
+    #[inline]
     pub fn as_mut_ref(&mut self) -> &mut T {
         self.entry.get_mut()
     }
@@ -387,7 +391,7 @@ pub struct Region<T> {
 
 impl <T> Region<T> {
 
-
+    #[inline]
     pub fn new() -> Self {
         Region {
             data: Vec::new(),
@@ -397,6 +401,11 @@ impl <T> Region<T> {
             #[cfg(feature = "debug-arena")]
             generation: 0,
         }
+    }
+}
+impl <T> Default for Region<T> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -641,14 +650,23 @@ impl <'a, T: 'static + HasIx<T>> Region<T> {
      * Return the current capacity of this region. A collection won't
      * be triggered by allocation unless the desired amount exceeds the capacity.
      */
+    #[inline]
     pub fn capacity(&self) -> usize {
         self.data.capacity()
     }
     /**
      * Return the current number of entries in the region.
      */
+    #[inline]
     pub fn len(&self) -> usize {
         self.data.len()
+    }
+    /**
+     * Returns true if there are currently no entries in this region.
+     */
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.data.is_empty()
     }
     fn take_valid_roots(&mut self) -> impl Iterator<Item=rc::Weak<IxCell<T>>> + '_ {
         self.roots.drain(..).filter(|root| {root.upgrade().is_some()})
