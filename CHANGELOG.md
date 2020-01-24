@@ -5,6 +5,9 @@
 ### Added
 - The feature "packed-headers" can be enabled for an experimental object layout featuring reduced header size.
 
+### Changed
+- Deprecated the confusing MutEntry::{as_ref, as_mut_ref}; Use {get, get_mut} instead
+
 ## [0.2.0] - 2020-01-11
 ### Added
 - Added an optional feature to enable debugging index validity at the cost of efficiency

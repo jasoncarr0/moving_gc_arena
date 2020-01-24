@@ -238,11 +238,21 @@ impl <'a, T> MutEntry<'a, T> {
         self.ix
     }
     #[inline]
+    #[deprecated(since="0.2.0", note="Please use MutEntry::get")]
     pub fn as_ref(&self) -> &T {
         self.entry.get()
     }
     #[inline]
+    #[deprecated(since="0.2.0", note="Please use MutEntry::get_mut")]
     pub fn as_mut_ref(&mut self) -> &mut T {
+        self.entry.get_mut()
+    }
+    #[inline]
+    pub fn get(&self) -> &T {
+        self.entry.get()
+    }
+    #[inline]
+    pub fn get_mut(&mut self) -> &mut T {
         self.entry.get_mut()
     }
 }
@@ -633,7 +643,7 @@ mod tests {
         std::mem::drop(r1);
 
         let mut e3 = r.alloc(|_| {Elem::new()});
-        e3.as_mut_ref().ix = Some(e3.ix());
+        e3.get_mut().ix = Some(e3.ix());
         let w3 = e3.weak();
 
         let r4 = r.alloc(|_| {Elem::new()}).root();
