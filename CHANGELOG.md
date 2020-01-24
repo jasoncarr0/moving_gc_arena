@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- The feature "packed-headers" can be enabled for an experimental object layout featuring reduced header size.
+
 ## [0.2.0] - 2020-01-11
 ### Added
 - Added an optional feature to enable debugging index validity at the cost of efficiency
