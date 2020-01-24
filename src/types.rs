@@ -4,6 +4,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+use std::rc;
 use std::cell::Cell;
 use std::marker::PhantomData;
 
@@ -13,7 +14,8 @@ use std::marker::PhantomData;
 // bits whatsoever
 /**
  * A raw index for a region, that should be used for internal edges.
- * This index is invalidated by many operations, but locations which
+ * 
+ * This index is invalidated by many operations. but locations which
  * have always been exposed exactly once by foreach_ix for each collection are
  * guaranteed to have an index which is valid.
  *
@@ -96,4 +98,17 @@ pub type IxCell<T> = Cell<Ix<T>>;
 pub enum SpotVariant<'a, E, T> {
     Present(&'a mut E),
     BrokenHeart(Ix<T>),
+}
+
+/**
+ * A weak index into a region.
+ *
+ * This index will never prevent an
+ * object from being collected, but
+ * can be used to test if an object
+ * has been collected, or access
+ * it as normal.
+ */
+pub struct Weak<T> {
+    cell: rc::Weak<IxCell<T>>
 }

@@ -1,6 +1,9 @@
 
 use crate::types::Ix;
 
+/**
+ * Trait to expose contained indices to the garbage collector.
+ */
 pub trait HasIx<T : 'static> {
     /**
      * Expose a mutable reference to every Ix owned

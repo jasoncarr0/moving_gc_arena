@@ -35,10 +35,49 @@ Dereferencing indices uses a reference to the region, giving strong safety guara
 ## Details of features and limitations
 
 * Members are a fixed type and size
+* Regions and External indices (gc::Root and gc::Weak) use Rc, so they are not Send/Sync
 * Internal indices (gc::Ix) are Copy and Send/Sync
-* External indices (gc::Root and gc::Weak) use Rc, so they are not Send/Sync
 * Access is guarded by access to the region (that is, dereferencing takes &Region and &mut Region).
-* Drop implementations are called as normal whenever an object is collected
+* Drop implementations are called as normal (if necessary) whenever an object is collected
 * Garbage collection may be performed both automatically and manually. Every resize of the buffer triggers a garbage collection for the best performance.
 * Garbage collection uses Cheney's algorithm.
 * Size cannot yet be tuned: We always double the size at least. Region::gc will shrink the allocation
+
+## Example Usage
+
+```rust
+use moving_gc_arena as gc;
+
+let mut r = gc::Region::new();
+
+struct Adj(Vec<gc::Ix<Adj>>);
+impl gc::HasIx<Adj> for Adj {
+ fn foreach_ix<'b, 'a : 'b, F>(&'a mut self, mut f: F) where
+     F: FnMut(&'b mut gc::Ix<T>)
+ {
+     self.0.foreach_ix(f);
+ }
+}
+impl Adj {
+    fn new() -> Self {
+        Adj(Vec::new())
+    }
+}
+
+let mut obj1 = r.alloc(|_|{Adj::new()}).root();
+let mut obj2 = r.alloc(|_|{Adj::new()}).root();
+let mut obj3 = r.alloc(|_|{Adj::new()}).root();
+
+// mutual cycle
+obj1.get_mut(&mut r).0.push(obj2.ix());
+obj2.get_mut(&mut r).0.push(obj1.ix());
+
+// self-cycle
+obj3.get_mut(&mut r).0.push(obj3.ix());
+
+std::mem::drop(obj1);
+std::mem::drop(obj3);
+
+r.gc(); // manually-triggered collection
+//obj3 now collected but obj1 and obj2 are live
+```

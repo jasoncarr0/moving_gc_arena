@@ -3,7 +3,7 @@ use std::rc::Rc;
 use std::rc;
 use std::cell::Cell;
 
-use crate::types::{Ix, IxCell, SpotVariant};
+use crate::types::{Ix, IxCell, SpotVariant, Weak};
 
 #[derive(Debug)]
 pub(crate) struct Entry<T> {
@@ -111,9 +111,6 @@ impl <T> Spot<T> {
         }
         std::mem::replace(self, Spot::BrokenHeart(other))
     }
-}
-pub struct Weak<T> {
-    cell: rc::Weak<IxCell<T>>
 }
 impl <T> Weak<T> {
     /**

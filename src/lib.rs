@@ -17,17 +17,46 @@ mod nonce;
 mod entry;
 mod has_ix;
 
-pub use types::{Ix};
+pub use types::{Ix, Weak};
 use types::{IxCell, SpotVariant};
-use entry::{Entry, Spot, Weak};
+use entry::{Entry, Spot};
 pub use has_ix::HasIx;
 
 #[derive(Debug, PartialEq, Eq)]
 #[allow(unused)]
+/**
+ * Type of region access errors.
+ */
 pub enum Error {
+    /**
+     * Incorrect usage resulted in an error,
+     * but the system does not have enough data
+     * to determine exactly what the error was.
+     *
+     * Enabling the feature "debug-arena" will
+     * allow the library to have appropriate data
+     * in most cases, with high costs to space usage.
+     */
     Indeterminable,
+    /**
+     * This index has been used with a region for
+     * which it was not created.
+     */
     IncorrectRegion,
+    /**
+     * This index has been invalidated by a garbage
+     * collection.
+     */
     EntryExpired,
+    /**
+     * This library is in an unexpected internal state.
+     * It is not expected that any valid rust code
+     * will be able receive this error, so encountering
+     * it is likely a bug in the library.
+     */
+    // It can also occur if e.g. 2^64 collections occur
+    // with debug-arena. That is of course still unexpected
+    // and still requires an error to occur.
     UnexpectedInternalState,
 }
 
@@ -64,7 +93,7 @@ impl <T> Ix<T> {
             } else if self.generation < region.generation {
                 Err(Error::EntryExpired)?;
             } else if self.generation > region.generation {
-                Err(Error::Indeterminable)?;
+                Err(Error::UnexpectedInternalState)?;
             }
         }
         Ok(())
@@ -103,6 +132,14 @@ impl <T> Ix<T> {
             .get_mut())
     }
 }
+
+/**
+ * A freshly created entry, allowing root/weak creation, and mutation
+ *
+ * This entry is created by calls to [`Region::alloc`](struct.Region.html#method.alloc)
+ * and will allow the creation of external and internal indices,
+ * as well as allowing access to the freshly-created object.
+ */
 pub struct MutEntry<'a, T> {
     ix: Ix<T>,
     entry: &'a mut Entry<T>,
@@ -110,6 +147,19 @@ pub struct MutEntry<'a, T> {
     roots: &'a mut Vec<rc::Weak<IxCell<T>>>,
 }
 
+/**
+ * An external rooted index into a region.
+ * 
+ * Roots will always keep the objects they
+ * point to live in the appropriate region.
+ *
+ * Roots should generally not be used within a region,
+ * instead use [`Ix`](struct.Ix.html).
+ * A root that is inside its own region will never
+ * be collected and is vulnerable to the same issues
+ * as Rc. Similarly, roots between two different regions
+ * may cause uncollectable reference cycles.
+ */
 pub struct Root<T> {
     cell: Rc<IxCell<T>>
 }
@@ -279,6 +329,7 @@ impl <'a, T> MutEntry<'a, T> {
  * Some methods (which necessarily take &mut self) may invalidate raw indices by moving the
  * objects, such as for a garbage collection.
  * These will be documented.
+ *
  */
 pub struct Region<T> {
     data: Vec<Spot<T>>,
@@ -494,6 +545,15 @@ impl <'a, T: 'static + HasIx<T>> Region<T> {
      * Immediately trigger a standard garbage collection.
      *
      * This invalidates raw indices.
+     *
+     * ```rust
+     * use moving_gc_arena as gc;
+     * let mut r = gc::Region::new();
+     *
+     * r.alloc(|_|{()});
+     * r.gc();
+     * assert!(r.is_empty());
+     * ```
      */
     pub fn gc(&mut self) {
         let mut dst = Vec::with_capacity(self.data.len());

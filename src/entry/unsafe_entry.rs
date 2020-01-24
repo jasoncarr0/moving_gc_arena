@@ -6,7 +6,7 @@ use std::cell::Cell;
 use std::mem::{forget, MaybeUninit, ManuallyDrop};
 use std::hint::unreachable_unchecked;
 
-use crate::types::{Ix, IxCell, SpotVariant};
+use crate::types::{Ix, IxCell, SpotVariant, Weak};
 
 
 #[inline(always)]
@@ -374,12 +374,6 @@ impl <T> Entry<T> {
             &mut *self.spot.value.as_mut_ptr()
         }
     }
-}
-
-
-
-pub struct Weak<T> {
-    cell: rc::Weak<IxCell<T>>
 }
 impl <T> Weak<T> {
     /**
