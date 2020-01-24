@@ -14,6 +14,11 @@
 - Separated Weak and Root into two different types.
     + Weak.ix() now returns Option<Ix<T>>, which can be used to test
       if it's been collected
+- MutEntry::to_root is now MutEntry::root and no longer takes ownership
+
+### Fixed
+- Creating a weak and root pointer to the same entry would cause Weak pointers
+to act like roots.
 
 ## [0.1.1] - 2020-01-07
 ### Added
