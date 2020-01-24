@@ -1,6 +1,6 @@
 [package]
 name = "moving_gc_arena"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Jason Carr <jcarr250@protonmail.com>"]
 edition = "2018"
 include = ["src/**/*", "Cargo.toml"]

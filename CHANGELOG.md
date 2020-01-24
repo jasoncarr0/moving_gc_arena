@@ -1,9 +1,10 @@
 # Changelog
 
-## Unreleased
+## [0.2.1] - 2020-01-24
 
 ### Added
 - The feature "packed-headers" can be enabled for an experimental object layout featuring reduced header size.
+- Further improved documentation.
 
 ### Changed
 - Deprecated the confusing MutEntry::{as_ref, as_mut_ref}; Use {get, get_mut} instead

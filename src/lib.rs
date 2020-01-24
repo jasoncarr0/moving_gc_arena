@@ -4,7 +4,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#![doc(html_root_url = "https://docs.rs/moving_gc_arena/0.2.0")]
+#![doc(html_root_url = "https://docs.rs/moving_gc_arena/0.2.1")]
 
 use std::rc::Rc;
 use std::rc;
