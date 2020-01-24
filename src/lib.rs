@@ -43,26 +43,6 @@ impl fmt::Display for Error {
 }
 impl std::error::Error for Error { }
 
-/**
- * A raw index for a region, that should be used for internal edges.
- * This index is invalidated by many operations, but locations which
- * have always been exposed exactly once by foreach_ix for each collection are
- * guaranteed to have an index which is valid.
- *
- * Furthermore, indices received from a MutEntry or Root/Weak are
- * valid when retrieved.
- *
- * An Ix is valid so long as no invalidating methods have been called.
- * Borrowing rules ensure several situations in which no invalidating method can be called:
- *  - An immutable reference to the region exists
- *  - A mutable or immutable reference to any element of this region exists, such as those
- *    acquired via Ix::get.
- *  - A MutEntry for this region exists.
- *
- * If an Ix is not valid for the given region, behavior is unspecified but safe,
- * A valid instance of T may be returned. Panics may occur with get and get_mut.
- * If the index is valid, then it still points to the expected object.
- */
 impl <T> Ix<T> {
     /**
      * If this crate has been compiled with support for validity checking,
@@ -267,6 +247,27 @@ impl <'a, T> MutEntry<'a, T> {
     }
 }
 
+/**
+ * The type of a collectable region.
+ *
+ * This object can be used to allocate, collect,
+ * traverse and update the objects within it.
+ *
+ * Access to the region is exposed through methods
+ * on the corresponding reference types, and requires
+ * references to this region in order to safely
+ * reference the data within. This ensures that
+ * garbage collections do not interrupt accesses and
+ * vice versa, and allows for a conservative compile-time check for uniqueness, rather than
+ * requiring use of an internal Cell type.
+ *
+ * Since garbage collection is a property of the region, it is not statically checked for indices.
+ * Weak and Root will always be in sync with their
+ * source region, but raw indices Ix may be invalidated.
+ * Some methods (which necessarily take &mut self) may invalidate raw indices by moving the
+ * objects, such as for a garbage collection.
+ * These will be documented.
+ */
 pub struct Region<T> {
     data: Vec<Spot<T>>,
     roots: Vec<rc::Weak<IxCell<T>>>,
@@ -474,8 +475,9 @@ impl <'a, T: 'static + HasIx<T>> Region<T> {
      * roots, weak pointers, and internal pointers to
      * the object.
      *
-     * This may trigger a garbage collection. As such,
-     * a function is used to generate the new value, which
+     * This may trigger a garbage collection and invalidate
+     * raw indices.  As such, a function is used to
+     * generate the new value, which
      * can query the state of the world post-collection.
      */
     pub fn alloc<F>(&mut self, make_t: F) -> MutEntry<T> where
@@ -500,6 +502,8 @@ impl <'a, T: 'static + HasIx<T>> Region<T> {
 
     /**
      * Immediately trigger a standard garbage collection.
+     *
+     * This invalidates raw indices.
      */
     pub fn gc(&mut self) {
         let mut dst = Vec::with_capacity(self.data.len());
