@@ -70,15 +70,23 @@ impl PresentData {
  */
 #[repr(C)]
 #[derive(Clone, Copy)]
-struct BrokenHeart(usize);
+struct BrokenHeart(usize, #[cfg(feature="debug-arena")] u64, #[cfg(feature="debug-arena")] u64,);
 impl BrokenHeart {
     unsafe fn into_unchecked<T>(self) -> Ix<T> {
-        Ix::new(self.0.wrapping_shr(1))
+        Ix::new(self.0.wrapping_shr(1),
+            #[cfg(feature = "debug-arena")]
+            self.1,
+            #[cfg(feature = "debug-arena")]
+            self.2)
     }
     fn from_unchecked<T>(ix: Ix<T>) -> Self {
         let val = ix.ix().wrapping_shl(1) | 1usize;
         assert!(val & 1 == 1);
-        BrokenHeart(val)
+        BrokenHeart(val,
+            #[cfg(feature = "debug-arena")]
+            ix.nonce,
+            #[cfg(feature = "debug-arena")]
+            ix.generation)
     }
 }
 
