@@ -110,5 +110,5 @@ pub enum SpotVariant<'a, E, T> {
  * it as normal.
  */
 pub struct Weak<T> {
-    cell: rc::Weak<IxCell<T>>
+    pub(crate) cell: rc::Weak<IxCell<T>>
 }
