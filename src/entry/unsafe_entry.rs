@@ -45,6 +45,7 @@ impl PresentData {
     // NOTE: Although this type is Copy
     // This effectively should consume, so the Rc will need
     // to be forgotten if this is only a borrow
+    #[inline]
     unsafe fn into_unchecked<T>(self) -> Option<*const IxCell<T>> {
         match self.0 & (!3usize) {
             0 => None,
@@ -53,6 +54,7 @@ impl PresentData {
             }
         }
     }
+    #[inline]
     unsafe fn from_unchecked<T>(rc: Option<*const IxCell<T>>) -> Self {
         PresentData(match rc {
             Some(rc) => rc as usize,
@@ -72,6 +74,7 @@ impl PresentData {
 #[derive(Clone, Copy)]
 struct BrokenHeart(usize, #[cfg(feature="debug-arena")] u64, #[cfg(feature="debug-arena")] u64,);
 impl BrokenHeart {
+    #[inline]
     unsafe fn into_unchecked<T>(self) -> Ix<T> {
         Ix::new(self.0.wrapping_shr(1),
             #[cfg(feature = "debug-arena")]
@@ -79,6 +82,7 @@ impl BrokenHeart {
             #[cfg(feature = "debug-arena")]
             self.2)
     }
+    #[inline]
     fn from_unchecked<T>(ix: Ix<T>) -> Self {
         let val = ix.ix().wrapping_shl(1) | 1usize;
         assert!(val & 1 == 1);
@@ -153,19 +157,21 @@ impl Header {
         Weak { cell }
     }
 
+    #[inline(always)]
     fn present() -> Self {
         Header {
             present: PresentData(0)
         }
     }
 
+    #[inline(always)]
     fn broken_heart<T>(ix: Ix<T>) -> Self {
         Header {
             broken_heart: BrokenHeart::from_unchecked(ix)
         }
     }
 
-    #[inline(always)]
+    #[inline]
     fn use_tag<F, T, O>(&mut self, f: F) -> O where
         F: FnOnce(TaggedHeader<T>) -> (TaggedHeader<T>, O)
     {
@@ -183,6 +189,8 @@ impl Header {
         ret
     }
 
+    // Always inline as the match block will
+    // benefit from Entry invariants
     #[inline(always)]
     unsafe fn get_tag<T>(&self) -> TaggedHeader<T> {
         unsafe {
