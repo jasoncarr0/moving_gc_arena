@@ -30,9 +30,11 @@ impl <T> Entry<T> {
         }
     }
 
+    #[inline(always)]
     pub fn get(&self) -> &T {
         &self.t
     }
+    #[inline(always)]
     pub fn get_mut(&mut self) -> &mut T {
         &mut self.t
     }
