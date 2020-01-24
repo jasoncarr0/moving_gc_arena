@@ -7,8 +7,7 @@ mod safe_entry;
 mod unsafe_entry;
 
 #[cfg(not(feature="packed-headers"))]
-#[allow(unused)]
-pub use safe_entry::*;
+pub(crate) use safe_entry::*;
 
 #[cfg(feature="packed-headers")]
-pub use unsafe_entry::*;
+pub(crate) use unsafe_entry::*;
