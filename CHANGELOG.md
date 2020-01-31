@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- Now no_std, since features depended only on alloc/core.
+
 ## [0.2.1] - 2020-01-24
 
 ### Added

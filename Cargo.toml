@@ -8,11 +8,8 @@ description = "Lightweight Garbage-collectable regions using indices and explici
 license = "MPL-2.0"
 repository = "https://github.com/jasoncarr0/moving_gc_arena"
 readme = "README.md"
-categories = ["memory-management", "data-structures"]
-keywords = ["memory", "garbage", "graph", "data-structure", "graph-algorithms"]
-
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+categories = ["memory-management", "data-structures", "no-std"]
+keywords = ["memory", "garbage", "graph", "data-structure", "graph-algorithms", "no-std"]
 
 [dependencies]
 
@@ -22,3 +19,4 @@ debug=true
 [features]
 debug-arena=[]
 packed-headers=[]
+
