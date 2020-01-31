@@ -1,5 +1,9 @@
 
 use crate::types::Ix;
+use alloc::{
+    boxed::Box,
+    vec::Vec
+};
 
 /**
  * Trait to expose contained indices to the garbage collector.

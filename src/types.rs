@@ -4,9 +4,9 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-use std::rc;
-use std::cell::Cell;
-use std::marker::PhantomData;
+use alloc::rc;
+use core::cell::Cell;
+use core::marker::PhantomData;
 
 #[repr(C)]
 // repr(C) Needed for unsafe header
@@ -41,8 +41,8 @@ pub struct Ix<T> {
     #[cfg(feature = "debug-arena")]
     pub(crate) generation: u64,
 }
-use std::fmt;
-impl <T> std::fmt::Debug for Ix<T> {
+use core::fmt;
+impl <T> fmt::Debug for Ix<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.ix.fmt(f)
     }

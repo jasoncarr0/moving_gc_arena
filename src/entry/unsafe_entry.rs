@@ -1,10 +1,10 @@
 
-use std::fmt::{Debug, Formatter};
-use std::rc::Rc;
-use std::rc;
-use std::cell::Cell;
-use std::mem::{forget, MaybeUninit, ManuallyDrop};
-use std::hint::unreachable_unchecked;
+use core::fmt::{Debug, Formatter};
+use alloc::rc::Rc;
+use alloc::rc;
+use core::cell::Cell;
+use core::mem::{forget, MaybeUninit, ManuallyDrop};
+use core::hint::unreachable_unchecked;
 
 use crate::types::{Ix, IxCell, SpotVariant, Weak};
 

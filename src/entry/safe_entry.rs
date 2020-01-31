@@ -1,7 +1,7 @@
-use std::fmt::{Debug, Formatter};
-use std::rc::Rc;
-use std::rc;
-use std::cell::Cell;
+use core::fmt::{Debug, Formatter};
+use alloc::rc::Rc;
+use alloc::rc;
+use core::cell::Cell;
 
 use crate::types::{Ix, IxCell, SpotVariant, Weak};
 
@@ -109,7 +109,7 @@ impl <T> Spot<T> {
         if let Spot::Present(ref mut e) = self {
             e.move_to(other);
         }
-        std::mem::replace(self, Spot::BrokenHeart(other))
+        core::mem::replace(self, Spot::BrokenHeart(other))
     }
 }
 impl <T> Weak<T> {
@@ -130,7 +130,7 @@ impl <T> Clone for Weak<T> {
     }
 }
 impl <T> Debug for Weak<T> {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter) -> core::fmt::Result {
         self.cell.upgrade().fmt(f)
     }
 }

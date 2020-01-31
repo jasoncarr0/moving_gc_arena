@@ -5,11 +5,16 @@
  */
 
 #![doc(html_root_url = "https://docs.rs/moving_gc_arena/0.2.1")]
+#![no_std]
 
-use std::rc::Rc;
-use std::rc;
-use std::cell::Cell;
-use std::fmt::{Debug, Formatter};
+extern crate alloc;
+
+use alloc::rc::Rc;
+use alloc::rc;
+use alloc::vec::Vec;
+use core::cell::Cell;
+use core::fmt;
+use fmt::{Debug, Formatter};
 
 mod types;
 #[cfg(feature = "debug-arena")]
@@ -60,7 +65,6 @@ pub enum Error {
     UnexpectedInternalState,
 }
 
-use std::fmt;
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match self {
@@ -72,7 +76,6 @@ impl fmt::Display for Error {
     }
 
 }
-impl std::error::Error for Error { }
 
 impl <T> Ix<T> {
     /**
@@ -169,7 +172,7 @@ impl <T> Clone for Root<T> {
     }
 }
 impl <T> Debug for Root<T> {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter) -> core::fmt::Result {
         self.cell.get().fmt(f)
     }
 }
@@ -397,7 +400,7 @@ impl <'a, T: 'static + HasIx<T>> Region<T> {
 
             unsafe {
                 let end = dst_spot_ptr.add(len);
-                std::ptr::write(end, obj);
+                core::ptr::write(end, obj);
             }
             new_index
         };
@@ -491,7 +494,7 @@ impl <'a, T: 'static + HasIx<T>> Region<T> {
         let len = self.data.len();
         let cap = self.data.capacity();
         if cap >= len + additional { return }
-        let mut dst = Vec::with_capacity(len + std::cmp::max(len, additional));
+        let mut dst = Vec::with_capacity(len + core::cmp::max(len, additional));
 
         #[cfg(feature = "debug-arena")]
         let new_gen = (self.nonce, self.generation+1);
@@ -662,7 +665,7 @@ mod tests {
         let w1 = e1.weak();
         let r1 = e1.root();
         let r2 = r.alloc(|_| {Elem::new()}).root();
-        std::mem::drop(r1);
+        core::mem::drop(r1);
         r.gc();
 
         //r1 should have stopped being root on drop
@@ -680,7 +683,7 @@ mod tests {
         let w1 = e1.weak();
         let r1 = e1.root();
         let r2 = r.alloc(|_| {Elem {ix: Some(r1.ix())}}).root();
-        std::mem::drop(r1);
+        core::mem::drop(r1);
 
         let mut e3 = r.alloc(|_| {Elem::new()});
         e3.get_mut().ix = Some(e3.ix());
@@ -695,7 +698,7 @@ mod tests {
         //nothing changed with r4 and w5 during access
         assert!(r4.try_get(&r).is_ok());
         assert!(w5.try_get(&r).is_ok());
-        std::mem::drop(r4);
+        core::mem::drop(r4);
 
         r.gc();
 
