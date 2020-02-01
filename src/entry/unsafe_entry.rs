@@ -227,7 +227,7 @@ impl <T> Drop for Spot<T> {
         unsafe {
             if let TaggedHeader::Present(ptr) = self.header.get_tag::<T>() {
                 // drop contents
-                std::ptr::drop_in_place(self.value.as_mut_ptr());
+                core::ptr::drop_in_place(self.value.as_mut_ptr());
                 // drop rc
                 if let Some(ptr) = ptr {
                     Rc::from_raw(ptr);
@@ -268,7 +268,7 @@ impl <T> Spot<T> {
         if let Some(e) = self.get_mut() {
             e.move_to(other);
         };
-        std::mem::replace(self,
+        core::mem::replace(self,
             Spot {
                 header: Header::broken_heart(other),
                 value: MaybeUninit::uninit(),
@@ -393,7 +393,7 @@ impl <T> Clone for Weak<T> {
     }
 }
 impl <T> Debug for Weak<T> {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter) -> core::fmt::Result {
         self.cell.upgrade().fmt(f)
     }
 }
